@@ -1,0 +1,90 @@
+"""SQLite persistence. One file holds the journal, the paper book and the wallet book,
+so a restarted desk resumes exactly where it stopped."""
+from __future__ import annotations
+
+import json
+import sqlite3
+import threading
+from pathlib import Path
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL, run_id TEXT, agent TEXT NOT NULL, kind TEXT NOT NULL,
+    mint TEXT, symbol TEXT, payload TEXT
+);
+CREATE INDEX IF NOT EXISTS events_kind ON events(kind, ts);
+CREATE TABLE IF NOT EXISTS kills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL, run_id TEXT, stage TEXT NOT NULL, mint TEXT NOT NULL, symbol TEXT,
+    reasons TEXT NOT NULL, metrics TEXT, recheck_at REAL
+);
+CREATE INDEX IF NOT EXISTS kills_mint ON kills(mint, ts);
+CREATE TABLE IF NOT EXISTS scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL, run_id TEXT, mint TEXT NOT NULL, symbol TEXT, score REAL,
+    passed INTEGER, components TEXT, features TEXT
+);
+CREATE TABLE IF NOT EXISTS positions (
+    id TEXT PRIMARY KEY, mint TEXT NOT NULL, symbol TEXT, pair_address TEXT, decimals INTEGER,
+    qty REAL, qty_raw INTEGER, cost_usd REAL, entry_price REAL, stop_price REAL,
+    high_price REAL, trail_active INTEGER, trail_trigger_price REAL, trail_distance_pct REAL,
+    score REAL, plan_id TEXT, opened_ts REAL, last_price REAL, last_price_ts REAL,
+    status TEXT, closed_ts REAL, exit_price REAL, proceeds_usd REAL, pnl_usd REAL,
+    exit_reason TEXT
+);
+CREATE TABLE IF NOT EXISTS account (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS wallet_token (
+    wallet TEXT NOT NULL, mint TEXT NOT NULL,
+    buy_usd REAL DEFAULT 0, sell_usd REAL DEFAULT 0,
+    buy_tokens REAL DEFAULT 0, sell_tokens REAL DEFAULT 0,
+    n_trades INTEGER DEFAULT 0, first_buy_ts REAL, last_sell_ts REAL,
+    PRIMARY KEY (wallet, mint)
+);
+CREATE TABLE IF NOT EXISTS trade_marks (mint TEXT PRIMARY KEY, ts REAL, ids TEXT);
+CREATE TABLE IF NOT EXISTS smart_wallets (
+    wallet TEXT PRIMARY KEY, source TEXT, wins INTEGER, losses INTEGER,
+    realized_usd REAL, added_ts REAL, updated_ts REAL
+);
+"""
+
+
+class Store:
+    def __init__(self, path: str | Path):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        self.path = str(path)
+        self.conn = sqlite3.connect(self.path, check_same_thread=False, timeout=30)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.lock = threading.RLock()
+        with self.lock:
+            self.conn.executescript(SCHEMA)
+            self.conn.commit()
+
+    def execute(self, sql: str, params: tuple | list = ()) -> sqlite3.Cursor:
+        with self.lock:
+            cur = self.conn.execute(sql, params)
+            self.conn.commit()
+            return cur
+
+    def executemany(self, sql: str, rows: list) -> None:
+        with self.lock:
+            self.conn.executemany(sql, rows)
+            self.conn.commit()
+
+    def query(self, sql: str, params: tuple | list = ()) -> list[sqlite3.Row]:
+        with self.lock:
+            return self.conn.execute(sql, params).fetchall()
+
+    def get_account(self, key: str, default=None):
+        rows = self.query("SELECT value FROM account WHERE key=?", (key,))
+        return json.loads(rows[0]["value"]) if rows else default
+
+    def set_account(self, key: str, value) -> None:
+        self.execute("INSERT INTO account(key, value) VALUES(?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                     (key, json.dumps(value)))
+
+    def close(self) -> None:
+        with self.lock:
+            self.conn.close()

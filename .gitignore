@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+# Live journal + paper book (SQLite). Large and rebuilt by the desk; summaries are committed instead.
+runs/*.db
+runs/*.db-*
+runs/*/events.jsonl
+runs/*/desk.log

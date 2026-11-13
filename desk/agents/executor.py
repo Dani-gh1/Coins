@@ -1,0 +1,213 @@
+"""Executor: the paper broker. Max 8% of equity per trade.
+
+Hard handoff: an order is only accepted with an approved RiskPlan whose ScoreCard passed.
+Fills are priced off live Jupiter quotes for the exact size (USDC <-> token), so price
+impact and pool fees are real. If Jupiter has no route the order is rejected, as it would
+be live. Every buy gets its stop set in the same step as the fill.
+"""
+from __future__ import annotations
+
+import threading
+import time
+from dataclasses import asdict, replace
+
+from ..config import ExecutorConfig
+from ..messages import (ExitSignal, FilterPass, Fill, Kill, Position, RiskPlan, ScoreCard,
+                        new_id)
+from ..sources import Sources
+from ..store import Store
+from .risk import Risk, RiskDecision
+
+POSITION_COLS = [f for f in Position.__dataclass_fields__]
+
+
+class HandoffError(RuntimeError):
+    pass
+
+
+class Executor:
+    name = "executor"
+
+    def __init__(self, cfg: ExecutorConfig, sources: Sources, store: Store, risk: Risk):
+        if cfg.mode != "paper":
+            raise NotImplementedError("live execution is not implemented; run in paper mode")
+        if cfg.max_position_pct > 8.0:
+            raise ValueError("max_position_pct may not exceed 8%")
+        self.cfg = cfg
+        self.src = sources
+        self.store = store
+        self.risk = risk
+        self.lock = threading.RLock()
+        self.cash: float = store.get_account("cash", cfg.starting_equity_usd)
+        if store.get_account("starting_equity") is None:
+            store.set_account("starting_equity", cfg.starting_equity_usd)
+            store.set_account("cash", self.cash)
+        self.positions: dict[str, Position] = {}
+        for row in store.query("SELECT * FROM positions WHERE status='open'"):
+            d = dict(row)
+            d["trail_active"] = bool(d["trail_active"])
+            self.positions[d["id"]] = Position(**d)
+        self.exit_failures: dict[str, int] = {}
+
+    # ---- state ---------------------------------------------------------------
+    def _save(self, pos: Position) -> None:
+        d = asdict(pos)
+        d["trail_active"] = int(d["trail_active"])
+        cols = ",".join(POSITION_COLS)
+        marks = ",".join("?" * len(POSITION_COLS))
+        self.store.execute(f"INSERT OR REPLACE INTO positions({cols}) VALUES({marks})",
+                           [d[c] for c in POSITION_COLS])
+
+    def open_positions(self) -> list[Position]:
+        with self.lock:
+            return [replace(p) for p in self.positions.values()]
+
+    def equity(self) -> float:
+        with self.lock:
+            return self.cash + sum(p.qty * p.last_price for p in self.positions.values())
+
+    def holds(self, mint: str) -> bool:
+        with self.lock:
+            return any(p.mint == mint for p in self.positions.values())
+
+    def in_cooldown(self, mint: str, now: float | None = None) -> bool:
+        now = now or time.time()
+        rows = self.store.query("SELECT MAX(closed_ts) AS t FROM positions WHERE mint=? AND status='closed'", (mint,))
+        last = rows[0]["t"] if rows else None
+        return bool(last) and now - last < self.cfg.reentry_cooldown_minutes * 60
+
+    # ---- entries -------------------------------------------------------------
+    def _reject(self, plan: RiskPlan, reason: str, metrics: dict | None = None) -> Kill:
+        c = plan.scorecard.candidate
+        return Kill(stage="executor", mint=c.mint, symbol=c.symbol, reasons=(reason,),
+                    metrics=metrics or {}, recheck_after_s=300.0, candidate_id=c.id)
+
+    def _validate(self, plan: RiskPlan) -> None:
+        if not isinstance(plan, RiskPlan) or not plan.approved:
+            raise HandoffError("order without an approved RiskPlan")
+        sc = plan.scorecard
+        if not isinstance(sc, ScoreCard) or not isinstance(sc.filter_pass, FilterPass):
+            raise HandoffError("broken lineage: plan must carry ScoreCard <- FilterPass <- Candidate")
+        if not sc.passed or sc.score < self.risk.min_score:
+            raise HandoffError("order whose ScoreCard did not pass the Analyst")
+        if plan.stop_loss_pct <= 0:
+            raise HandoffError("order without a stop")
+
+    def order_size(self) -> float:
+        with self.lock:
+            cap = self.equity() * self.cfg.max_position_pct / 100.0
+            return max(0.0, min(cap, self.cash - self.cfg.tx_cost_usd))
+
+    def enter(self, plan: RiskPlan) -> tuple[Fill, Position] | Kill:
+        self._validate(plan)
+        c = plan.scorecard.candidate
+        with self.lock:
+            if self.holds(c.mint):
+                return self._reject(plan, "already holding")
+            if len(self.positions) >= self.cfg.max_open_positions:
+                return self._reject(plan, f"max open positions ({self.cfg.max_open_positions}) reached")
+        if self.in_cooldown(c.mint):
+            return self._reject(plan, "re-entry cooldown")
+        size = self.order_size()
+        if size < self.cfg.min_order_usd:
+            return self._reject(plan, f"order ${size:.2f} below minimum ${self.cfg.min_order_usd:.0f}")
+
+        jup = plan.scorecard.filter_pass.jupiter or {}
+        decimals = jup.get("decimals")
+        if decimals is None:
+            info = self.src.rpc.mint_info(c.mint)
+            decimals = info["decimals"] if info else None
+        if decimals is None:
+            return self._reject(plan, "unknown token decimals")
+
+        quote = self.src.jup.buy_quote(c.mint, size, self.cfg.quote_slippage_bps)
+        if quote is None:
+            return self._reject(plan, "no Jupiter route for buy")
+        impact = float(quote.get("priceImpactPct") or 0) * 100.0
+        if impact > self.cfg.max_price_impact_pct:
+            size = size * self.cfg.max_price_impact_pct / impact * 0.9
+            if size < self.cfg.min_order_usd:
+                return self._reject(plan, f"price impact {impact:.2f}% too high for minimum size")
+            quote = self.src.jup.buy_quote(c.mint, size, self.cfg.quote_slippage_bps)
+            if quote is None:
+                return self._reject(plan, "no Jupiter route for resized buy")
+            impact = float(quote.get("priceImpactPct") or 0) * 100.0
+            if impact > self.cfg.max_price_impact_pct:
+                return self._reject(plan, f"price impact {impact:.2f}% > {self.cfg.max_price_impact_pct}%",
+                                    {"size_usd": size})
+        spent = int(quote["inAmount"]) / 1e6
+        qty_raw = int(quote["outAmount"])
+        qty = qty_raw / 10 ** int(decimals)
+        if qty <= 0:
+            return self._reject(plan, "zero-size quote")
+        entry = spent / qty
+        now = time.time()
+        pos = Position(
+            id=new_id("pos"), mint=c.mint, symbol=c.symbol, pair_address=c.pair_address,
+            decimals=int(decimals), qty=qty, qty_raw=qty_raw, cost_usd=spent + self.cfg.tx_cost_usd,
+            entry_price=entry, stop_price=Risk.initial_stop(entry, plan), high_price=entry,
+            trail_active=False, trail_trigger_price=Risk.trail_trigger(entry, plan),
+            trail_distance_pct=plan.trail_distance_pct, score=plan.scorecard.score, plan_id=plan.id,
+            opened_ts=now, last_price=c.price_usd or entry, last_price_ts=now)
+        with self.lock:
+            if spent + self.cfg.tx_cost_usd > self.cash + 1e-9:
+                return self._reject(plan, "insufficient cash at fill time")
+            self.cash -= spent + self.cfg.tx_cost_usd
+            self.positions[pos.id] = pos
+            self.store.set_account("cash", self.cash)
+            self._save(pos)
+        fill = Fill(side="buy", position_id=pos.id, mint=c.mint, symbol=c.symbol, usd=spent,
+                    tokens=qty, price=entry, impact_pct=impact, source="jupiter-quote", ts=now)
+        return fill, replace(pos)
+
+    # ---- risk updates and exits ---------------------------------------------
+    def apply(self, d: RiskDecision, now: float | None = None) -> None:
+        with self.lock:
+            pos = self.positions.get(d.position_id)
+            if not pos:
+                return
+            pos.high_price = max(pos.high_price, d.high_price)
+            pos.stop_price = max(pos.stop_price, d.stop_price)   # stops only ratchet up
+            pos.trail_active = pos.trail_active or d.trail_active
+            pos.last_price = d.mark_price
+            pos.last_price_ts = now or time.time()
+            self._save(pos)
+
+    def exit(self, sig: ExitSignal) -> tuple[Fill, Position] | None:
+        with self.lock:
+            pos = self.positions.get(sig.position_id)
+            if not pos:
+                return None
+            pos = replace(pos)
+        quote = self.src.jup.sell_quote(pos.mint, pos.qty_raw, self.cfg.quote_slippage_bps)
+        if quote is not None:
+            proceeds = int(quote["outAmount"]) / 1e6
+            impact = float(quote.get("priceImpactPct") or 0) * 100.0
+            source = "jupiter-quote"
+        else:
+            fails = self.exit_failures.get(pos.id, 0) + 1
+            self.exit_failures[pos.id] = fails
+            if fails < 3:
+                return None
+            # No route three times in a row: book it at the mark minus a 5% haircut.
+            impact = 5.0
+            proceeds = pos.qty * sig.mark_price * 0.95
+            source = "model-haircut"
+        now = time.time()
+        with self.lock:
+            live = self.positions.pop(pos.id, None)
+            if live is None:
+                return None
+            live.status = "closed"
+            live.closed_ts = now
+            live.exit_price = proceeds / live.qty if live.qty else 0.0
+            live.proceeds_usd = proceeds - self.cfg.tx_cost_usd
+            live.pnl_usd = live.proceeds_usd - live.cost_usd
+            live.exit_reason = sig.reason
+            self.cash += live.proceeds_usd
+            self.store.set_account("cash", self.cash)
+            self._save(live)
+            self.exit_failures.pop(pos.id, None)
+        fill = Fill(side="sell", position_id=live.id, mint=live.mint, symbol=live.symbol, usd=proceeds,
+                    tokens=live.qty, price=live.exit_price, impact_pct=impact, source=source, ts=now)
+        return fill, replace(live)

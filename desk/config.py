@@ -1,0 +1,134 @@
+"""Every threshold the desk uses lives here, so the rules are auditable in one place.
+
+Override any value with a TOML file (see config.example.toml) passed via --config.
+"""
+from __future__ import annotations
+
+import tomllib
+from dataclasses import dataclass, field, fields, is_dataclass
+from pathlib import Path
+
+SOL_MINT = "So11111111111111111111111111111111111111112"
+USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+
+
+@dataclass
+class ScoutConfig:
+    min_pair_age_minutes: float = 30.0
+    max_pair_age_hours: float = 72.0
+    min_mcap_usd: float = 300_000.0
+    max_mcap_usd: float = 20_000_000.0
+    # Only pairs quoted in these tokens are considered tradable.
+    accepted_quote_mints: tuple[str, ...] = (SOL_MINT, USDC_MINT, USDT_MINT)
+    # Discovery feeds. DexScreener is always the source of truth for age/mcap;
+    # the other feeds only widen the net of mint addresses fed into it.
+    use_jupiter_feeds: bool = True
+    use_geckoterminal_feeds: bool = True
+
+
+@dataclass
+class FilterConfig:
+    min_lp_locked_pct: float = 90.0          # LP burned or locked on the traded pair
+    min_liquidity_usd: float = 40_000.0
+    min_volume_1h_usd: float = 50_000.0
+    max_top10_pct: float = 25.0               # excludes AMM pools / lockers
+    max_dev_pct: float = 3.0
+    max_dev_dead_launches: int = 3            # prior creator tokens now dead (<$10k mcap, >6h old)
+    max_bundle_pct: float = 10.0              # linked-wallet / bundle cluster share of supply
+    max_price_change_1h_pct: float = 80.0
+    # A kill on market data (liq/vol/pump/top10/dev) is re-checked after this long.
+    recheck_dynamic_minutes: float = 10.0
+    # A kill on contract safety (authorities, LP, rugs, bundles) sticks this long.
+    recheck_structural_minutes: float = 360.0
+
+
+@dataclass
+class AnalystConfig:
+    min_score: float = 70.0
+    weights: dict[str, float] = field(default_factory=lambda: {
+        "momentum": 0.20,
+        "unique_buyers": 0.20,
+        "buy_sell": 0.15,
+        "holder_growth": 0.15,
+        "liq_mcap": 0.15,
+        "smart_wallets": 0.15,
+    })
+    # Smart-wallet component is only counted once the book has this many wallets;
+    # until then its weight is redistributed (and the scorecard says so).
+    min_smart_wallet_book: int = 10
+    rescore_after_minutes: float = 5.0
+    # A wallet only counts as a buyer if it bought at least this much in the window;
+    # buys under dust_usd are treated as bot-farmed holders.
+    real_buyer_min_usd: float = 25.0
+    dust_usd: float = 5.0
+
+
+@dataclass
+class ExecutorConfig:
+    mode: str = "paper"                       # only "paper" is implemented
+    starting_equity_usd: float = 10_000.0
+    max_position_pct: float = 8.0             # hard cap per trade, % of equity
+    max_open_positions: int = 10
+    min_order_usd: float = 25.0
+    max_price_impact_pct: float = 2.0         # shrink the order until the quote fits this
+    quote_slippage_bps: int = 500
+    tx_cost_usd: float = 0.05                 # network + priority fee per swap (paper)
+    reentry_cooldown_minutes: float = 120.0
+
+
+@dataclass
+class RiskConfig:
+    stop_loss_pct: float = 6.0                # set before entry, anchored to the fill
+    trail_trigger_pct: float = 12.0           # trailing stop arms at +12%
+    trail_distance_pct: float = 6.0           # then trails the high by this much
+    poll_seconds: float = 10.0
+    stale_price_seconds: float = 300.0
+
+
+@dataclass
+class DeskConfig:
+    scan_interval_seconds: float = 60.0
+    data_dir: str = "runs"
+    smart_wallet_seed_file: str = "data/smart_wallets.txt"
+    learner_pools_per_cycle: int = 2
+    scout: ScoutConfig = field(default_factory=ScoutConfig)
+    filter: FilterConfig = field(default_factory=FilterConfig)
+    analyst: AnalystConfig = field(default_factory=AnalystConfig)
+    executor: ExecutorConfig = field(default_factory=ExecutorConfig)
+    risk: RiskConfig = field(default_factory=RiskConfig)
+
+
+def _apply(obj, overrides: dict, path: str = "") -> None:
+    known = {f.name for f in fields(obj)}
+    for key, value in overrides.items():
+        if key not in known:
+            raise ValueError(f"unknown config key: {path}{key}")
+        current = getattr(obj, key)
+        if is_dataclass(current):
+            if not isinstance(value, dict):
+                raise ValueError(f"{path}{key} must be a table")
+            _apply(current, value, f"{path}{key}.")
+        elif isinstance(current, dict):
+            merged = dict(current)
+            merged.update(value)
+            setattr(obj, key, merged)
+        elif isinstance(current, tuple):
+            setattr(obj, key, tuple(value))
+        else:
+            setattr(obj, key, type(current)(value) if current is not None else value)
+
+
+def load_config(path: str | None = None) -> DeskConfig:
+    cfg = DeskConfig()
+    if path:
+        with open(Path(path), "rb") as fh:
+            _apply(cfg, tomllib.load(fh))
+    if cfg.executor.mode != "paper":
+        raise ValueError("executor.mode must be 'paper' - live trading is not implemented")
+    if cfg.executor.max_position_pct > 8.0:
+        raise ValueError("executor.max_position_pct may not exceed 8")
+    total = sum(cfg.analyst.weights.values())
+    if abs(total - 1.0) > 1e-6:
+        raise ValueError(f"analyst.weights must sum to 1.0 (got {total})")
+    return cfg

@@ -1,0 +1,47 @@
+# Copy to my.toml, edit, and run:  python -m desk run --config my.toml
+# Only the keys you set are changed; everything else keeps the defaults in desk/config.py.
+
+scan_interval_seconds = 60
+data_dir = "runs"
+
+[scout]
+min_pair_age_minutes = 30
+max_pair_age_hours = 72
+min_mcap_usd = 300000
+max_mcap_usd = 20000000
+
+[filter]
+min_lp_locked_pct = 90
+min_liquidity_usd = 40000
+min_volume_1h_usd = 50000
+max_top10_pct = 25
+max_dev_pct = 3
+max_dev_dead_launches = 3
+max_bundle_pct = 10
+max_price_change_1h_pct = 80
+
+[analyst]
+min_score = 70
+real_buyer_min_usd = 25
+dust_usd = 5
+min_smart_wallet_book = 10
+
+[analyst.weights]
+momentum = 0.20
+unique_buyers = 0.20
+buy_sell = 0.15
+holder_growth = 0.15
+liq_mcap = 0.15
+smart_wallets = 0.15
+
+[executor]
+starting_equity_usd = 10000
+max_position_pct = 8          # hard-capped at 8 in code
+max_open_positions = 10
+max_price_impact_pct = 2
+
+[risk]
+stop_loss_pct = 6
+trail_trigger_pct = 12
+trail_distance_pct = 6
+poll_seconds = 10
