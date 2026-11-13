@@ -35,7 +35,7 @@ def market_checks(c: Candidate, cfg: FilterConfig) -> tuple[list[str], dict]:
     if vol1h < cfg.min_volume_1h_usd:
         reasons.append(f"low_volume_1h: ${vol1h:,.0f} < ${cfg.min_volume_1h_usd:,.0f}")
     if pc1h > cfg.max_price_change_1h_pct:
-        reasons.append(f"already_pumped: +{pc1h:.0f}% in 1h > +{cfg.max_price_change_1h_pct:.0f}%")
+        reasons.append(f"already_pumped: +{pc1h:.1f}% in 1h > +{cfg.max_price_change_1h_pct:.0f}%")
     return reasons, metrics
 
 
