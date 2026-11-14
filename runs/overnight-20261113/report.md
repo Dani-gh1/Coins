@@ -1,85 +1,92 @@
 # Memecoin desk report - run overnight-20261113
 
-Generated 2026-11-14 02:56 UTC. **Paper trading only.**
+Generated 2026-11-14 04:54 UTC. **Paper trading only.**
 
-Window: 11-13 19:07 -> 11-14 02:56 UTC (7.8 h, 470 scan cycles)
+Window: 11-13 19:07 -> 11-14 04:54 UTC (9.8 h, 588 scan cycles)
 
 ## Account
 
 | starting equity | cash | open MTM | equity | return | realised P&L | closed trades | win rate |
 |---|---|---|---|---|---|---|---|
-| $10,000.00 | $10,052.01 | $0.00 | $10,052.01 | +0.52% | $52.01 | 1 | 100% |
+| $10,000.00 | $10,055.71 | $0.00 | $10,055.71 | +0.56% | $55.71 | 2 | 100% |
 
 ## Closed trades
 
 | symbol | opened | closed | score | cost | proceeds | P&L | % | exit |
 |---|---|---|---|---|---|---|---|---|
 | CSI | 11-14 00:16 | 11-14 00:18 | 84.2 | $290.58 | $342.58 | $52.01 | +17.9% | trailing_stop |
+| WOHAIHAO | 11-14 03:24 | 11-14 03:41 | 72.9 | $69.89 | $73.59 | $3.70 | +5.3% | trailing_stop |
 
 ## Kills
 
-621 kill decisions across 27 distinct coins (filter 344, analyst 274, executor 3). A coin can fail several rules at once.
+824 kill decisions across 31 distinct coins (filter 452, analyst 369, executor 3). A coin can fail several rules at once.
 
 | stage | rule | times hit |
 |---|---|---|
-| filter | low_volume_1h | 298 |
-| analyst | score_below_70 | 274 |
-| filter | low_liquidity | 215 |
-| filter | already_pumped | 42 |
+| filter | low_volume_1h | 394 |
+| analyst | score_below_70 | 369 |
+| filter | low_liquidity | 285 |
+| filter | already_pumped | 53 |
+| filter | bundled | 3 |
 | filter | mint_authority | 2 |
 | filter | lp_unlocked | 2 |
 | filter | top10_concentration | 2 |
-| filter | bundled | 2 |
 | executor | price impact 2.38% > 2.0% | 1 |
 | executor | price impact 2.21% > 2.0% | 1 |
 | executor | re-entry cooldown | 1 |
 
 ## Analyst scores
 
-278 scorecards, 4 at 70+.
+374 scorecards, 5 at 70+.
 
 | symbol | when | score | momentum | unique buyers | buy/sell | holder growth | liq/mcap | smart wallets |
 |---|---|---|---|---|---|---|---|---|
 | CSI | 11-14 00:16 | **84.2** | 87 | 100 | 100 | 89 | 39 | - |
+| WOHAIHAO | 11-14 03:24 | **72.9** | 88 | 98 | 33 | 60 | 72 | - |
+| Chunkee | 11-14 04:07 | **68.3** | 67 | 61 | 51 | 100 | 65 | - |
 | SPEED | 11-13 22:29 | **63.6** | 70 | 42 | 81 | 60 | 70 | - |
 | WANTED | 11-13 21:03 | **56.6** | 74 | 74 | 42 | 25 | 57 | - |
+| JENSEN | 11-14 03:09 | **54.5** | 25 | 71 | 76 | 82 | 22 | - |
 | inuhao | 11-14 02:47 | **54.1** | 99 | 77 | 4 | 9 | 59 | - |
 | FOOD | 11-13 19:32 | **45.2** | 48 | 77 | 45 | 5 | 39 | - |
 | Max | 11-14 01:41 | **43.8** | 60 | 16 | 100 | 0 | 47 | - |
 | AMC | 11-13 21:29 | **39.2** | 53 | 37 | 100 | 2 | 0 | - |
-| JENSEN | 11-14 02:47 | **27.3** | 56 | 11 | 16 | 28 | 23 | - |
 
 ## Every coin the desk evaluated
 
 | coin | mint | first seen | last seen | checks | best score | trades | what stopped it (times) |
 |---|---|---|---|---|---|---|---|
-| inuhao | `FyHakv…` | 11-13 19:08 | 11-14 02:52 | 75 | 54.1 | - | score < 70 (75) |
-| FOOD | `FTu55M…` | 11-13 19:08 | 11-13 21:24 | 24 | 45.2 | - | score < 70 (23), bundled (1) |
-| Max | `5qaP7o…` | 11-13 19:08 | 11-14 02:53 | 70 | 43.8 | - | score < 70 (56), low_volume_1h (14) |
+| inuhao | `FyHakv…` | 11-13 19:08 | 11-14 04:51 | 95 | 54.1 | - | score < 70 (95) |
+| FOOD | `FTu55M…` | 11-13 19:08 | 11-14 03:25 | 25 | 45.2 | - | score < 70 (23), bundled (2) |
+| Max | `5qaP7o…` | 11-13 19:08 | 11-14 04:49 | 81 | 43.8 | - | score < 70 (56), low_volume_1h (25) |
 | WANTED | `BeLVQE…` | 11-13 19:08 | 11-13 23:48 | 47 | 56.6 | - | score < 70 (46), already_pumped (1) |
-| SHARKBUX | `ttwocS…` | 11-13 19:08 | 11-14 02:46 | 45 | - | - | low_volume_1h (45) |
+| SHARKBUX | `ttwocS…` | 11-13 19:08 | 11-14 04:52 | 57 | - | - | low_volume_1h (57) |
 | QQQ | `QQQvDY…` | 11-13 19:08 | 11-13 19:38 | 4 | - | - | low_volume_1h (4) |
-| LAB | `BQ1onb…` | 11-13 19:08 | 11-14 02:46 | 45 | - | - | low_liquidity (45), low_volume_1h (45) |
+| LAB | `BQ1onb…` | 11-13 19:08 | 11-14 04:52 | 57 | - | - | low_liquidity (57), low_volume_1h (57) |
 | PREDICT | `7GM6DT…` | 11-13 19:08 | 11-13 22:56 | 23 | - | - | low_liquidity (23), low_volume_1h (23) |
-| PICO | `6rWAho…` | 11-13 19:08 | 11-14 02:46 | 45 | - | - | low_liquidity (45), low_volume_1h (45) |
-| PICO | `6YMLWr…` | 11-13 19:08 | 11-14 02:46 | 45 | - | - | low_liquidity (45), low_volume_1h (45) |
+| PICO | `6rWAho…` | 11-13 19:08 | 11-14 04:52 | 57 | - | - | low_liquidity (57), low_volume_1h (57) |
+| PICO | `6YMLWr…` | 11-13 19:08 | 11-14 04:52 | 57 | - | - | low_liquidity (57), low_volume_1h (57) |
 | UODF | `GdauN3…` | 11-13 19:08 | 11-13 21:54 | 17 | - | - | low_liquidity (17), low_volume_1h (17) |
 | GTA 6 Coin | `D2pZMT…` | 11-13 19:08 | 11-13 20:36 | 8 | - | - | low_liquidity (8), low_volume_1h (8) |
-| AMC | `HWya5C…` | 11-13 19:34 | 11-14 02:52 | 67 | 39.2 | - | score < 70 (56), already_pumped (11) |
+| AMC | `HWya5C…` | 11-13 19:34 | 11-14 04:51 | 87 | 39.2 | - | score < 70 (76), already_pumped (11) |
 | AKT | `5d3fjP…` | 11-13 19:40 | 11-13 22:55 | 6 | - | - | low_volume_1h (6) |
 | MORI | `MoR1wh…` | 11-13 19:50 | 11-14 01:50 | 2 | - | - | mint_authority (2), lp_unlocked (2), top10_concentration (2) |
-| Shitcoin | `8p7GCo…` | 11-13 19:58 | 11-14 02:47 | 19 | - | - | low_volume_1h (19) |
+| Shitcoin | `8p7GCo…` | 11-13 19:58 | 11-14 04:52 | 27 | - | - | low_volume_1h (27) |
 | Ballfin | `9jh6f2…` | 11-13 20:35 | 11-13 20:35 | 1 | - | - | already_pumped (1) |
 | Speed | `4cPQ6s…` | 11-13 21:05 | 11-13 21:33 | 2 | - | - | low_volume_1h (1), bundled (1) |
 | punchhao | `C5jaQ3…` | 11-13 21:11 | 11-13 21:11 | 1 | - | - | already_pumped (1) |
 | SPEED | `7csfMg…` | 11-13 21:51 | 11-13 23:04 | 11 | 63.6 | - | score < 70 (7), already_pumped (4) |
 | AI | `A8oP4D…` | 11-13 21:59 | 11-13 23:03 | 7 | - | - | low_liquidity (7), low_volume_1h (7) |
-| CSI | `CRwB4G…` | 11-13 23:07 | 11-14 02:55 | 23 | 84.2 | 1 ($52.01) | score < 70 (10), already_pumped (9), executor: price impact (2) |
+| CSI | `CRwB4G…` | 11-13 23:07 | 11-14 04:52 | 43 | 84.2 | 1 ($52.01) | score < 70 (30), already_pumped (9), executor: price impact (2) |
 | FOOD | `9YuoQD…` | 11-14 00:54 | 11-14 01:24 | 4 | - | - | low_liquidity (4), low_volume_1h (4) |
-| PREDICT | `6dWweg…` | 11-14 00:59 | 11-14 02:56 | 12 | - | - | low_liquidity (12), low_volume_1h (12) |
-| JENSEN | `B2YpP2…` | 11-14 01:23 | 11-14 02:52 | 10 | 27.3 | - | already_pumped (9), score < 70 (1) |
-| GCAT | `7U2kPF…` | 11-14 01:49 | 11-14 02:51 | 7 | - | - | low_liquidity (7), already_pumped (6), low_volume_1h (1) |
-| ANTH | `2bvKtU…` | 11-14 02:36 | 11-14 02:46 | 2 | - | - | low_liquidity (2), low_volume_1h (2) |
+| PREDICT | `6dWweg…` | 11-14 00:59 | 11-14 03:38 | 16 | - | - | low_liquidity (16), low_volume_1h (16) |
+| JENSEN | `B2YpP2…` | 11-14 01:23 | 11-14 04:51 | 29 | 54.5 | - | score < 70 (20), already_pumped (9) |
+| GCAT | `7U2kPF…` | 11-14 01:49 | 11-14 04:49 | 18 | - | - | low_liquidity (18), low_volume_1h (12), already_pumped (6) |
+| ANTH | `2bvKtU…` | 11-14 02:36 | 11-14 04:52 | 14 | - | - | low_liquidity (14), low_volume_1h (14) |
+| WOHAIHAO | `4B1mCG…` | 11-14 03:14 | 11-14 04:50 | 13 | 72.9 | 1 ($3.70) | score < 70 (10), already_pumped (2) |
+| Chunkee | `5ZDiuB…` | 11-14 03:39 | 11-14 04:35 | 9 | 68.3 | - | score < 70 (6), already_pumped (3) |
+| HARAMBE | `EjoWiu…` | 11-14 03:45 | 11-14 03:45 | 1 | - | - | already_pumped (1) |
+| SWJ | `69HP7a…` | 11-14 03:50 | 11-14 04:52 | 7 | - | - | low_liquidity (7), already_pumped (5), low_volume_1h (2) |
 
 ## Smart-wallet book
 
