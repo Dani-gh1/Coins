@@ -69,14 +69,14 @@ class ExecutorConfig:
     mode: str = "paper"                       # only "paper" is implemented
     starting_equity_usd: float = 10_000.0
     max_position_pct: float = 8.0             # hard cap per trade, % of equity
-    max_open_positions: int = 10
+    max_open_positions: int = 0               # 0 = no limit (cash is then the only cap)
     min_order_usd: float = 25.0
     # Optional cap on Jupiter's quoted price impact: shrink the order until the quote fits.
     # 0 = no cap (default): every order is the full max_position_pct, whatever it costs.
     max_price_impact_pct: float = 0.0
     quote_slippage_bps: int = 500
     tx_cost_usd: float = 0.05                 # network + priority fee per swap (paper)
-    reentry_cooldown_minutes: float = 120.0
+    reentry_cooldown_minutes: float = 0.0     # 0 = a coin can be bought again right after a sale
 
 
 @dataclass
@@ -84,7 +84,7 @@ class RiskConfig:
     stop_loss_pct: float = 6.0                # set before entry, anchored to the fill
     trail_trigger_pct: float = 12.0           # trailing stop arms at +12%
     trail_distance_pct: float = 6.0           # then trails the high by this much
-    poll_seconds: float = 10.0
+    poll_seconds: float = 3.0                 # how often open positions are marked and stops checked
     stale_price_seconds: float = 300.0
 
 

@@ -139,7 +139,7 @@ class Executor:
         with self.lock:
             if self.holds(c.mint):
                 return self._reject(plan, "already holding")
-            if len(self.positions) >= self.cfg.max_open_positions:
+            if 0 < self.cfg.max_open_positions <= len(self.positions):
                 return self._reject(plan, f"max open positions ({self.cfg.max_open_positions}) reached")
         if self.in_cooldown(c.mint):
             return self._reject(plan, "re-entry cooldown")

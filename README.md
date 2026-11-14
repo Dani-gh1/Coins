@@ -9,7 +9,7 @@ Scout ──Candidate──▶ Filter ──FilterPass──▶ Analyst ──Sc
                        │                       │                                           │
                       Kill                  Kill/Defer                       Fill + Position (stop set at fill)
                                                                                            │
-                           Risk ◀── marks every 10s ── open positions ◀────────────────────┘
+                           Risk ◀── marks every 3s ─── open positions ◀────────────────────┘
                              └──ExitSignal──▶ Executor ──Fill──▶ closed
 Logger: every message above goes to SQLite + JSONL
 ```
@@ -75,7 +75,7 @@ python3 -m desk once                           # a single scan cycle
 python3 -m desk report --run-id night1         # P&L, trades, kill table, top scores
 python3 -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
 python3 -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
-python3 -m unittest discover -s tests -t .     # 44 offline tests
+python3 -m unittest discover -s tests -t .     # 46 offline tests
 ```
 
 ### Dashboard
@@ -126,10 +126,14 @@ enough to commit).
 - Orders are not shrunk to fit the pool. An 8% order on a $40–60k pool pays roughly 3–4.5%
   in price impact going in and again coming out, and the −6% stop is measured from that fill,
   so it sits only about 2% under the market price at entry.
+- By default there is no cap on open positions and no cooldown after a sale. Cash is the only
+  limit (about twelve 8% positions), and a coin that was just stopped out can be bought again on
+  the next scan, paying the round-trip cost again. `executor.max_open_positions` and
+  `executor.reentry_cooldown_minutes` bring either back.
 - Fills use real Jupiter quotes for the exact size, so price impact and pool fees are real.
   Latency, MEV, failed transactions and priority-fee spikes are not modelled. Each swap is
   charged a flat $0.05.
-- Stops are checked every 10 s against the mark price. On a fast dump the exit fills at the
+- Stops are checked every 3 s against the mark price. On a fast dump the exit fills at the
   next quote, so a "−6% stop" can realise a bigger loss. The journal records the actual fill.
 - "Bundled launch" relies on RugCheck's linked-wallet insider networks. That is a strong proxy,
   not a slot-by-slot reconstruction of the launch block.

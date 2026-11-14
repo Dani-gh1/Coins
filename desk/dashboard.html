@@ -624,7 +624,8 @@ const impact = (v) => (v == null ? "–" : share(v, 2));
 function openCard(state) {
   const rows = state.open_positions;
   if (!rows.length) return card("Åbne positioner", null, h("div", { class: "empty", text: "Ingen åbne positioner lige nu." }));
-  return card("Åbne positioner", "Kurs og stop opdateres hvert 10. sekund, mens desken kører. Tryk på en række for detaljer.",
+  const every = state.rules ? num(state.rules.risk.poll_seconds) + ". sekund" : "få sekunder";
+  return card("Åbne positioner", "Kurs og stop opdateres hvert " + every + ", mens desken kører. Tryk på en række for detaljer.",
     h("div", { class: "rows wide" },
       h("div", { class: "rhead cols-open" }, h("div", { text: "Mønt" }), h("div", { class: "num", text: "Lige nu" }),
         h("div", { class: "num", text: "Bidrag" }), h("div", { class: "num", text: "Indsats" }), h("div", { text: "Købt" }),
@@ -825,8 +826,9 @@ function rulesCard(state) {
       group("Executor – handler", [
         li("Indsats ", b(num(ex.max_position_pct) + " %"), " af kontoen pr. handel"),
         li("Grænse for prisvirkning: ", b(ex.max_price_impact_pct > 0 ? num(ex.max_price_impact_pct, 1) + " %" : "ingen")),
-        li("Højst ", b(num(ex.max_open_positions)), " åbne positioner"),
-        li("Karantæne efter salg: ", b(duration(ex.reentry_cooldown_minutes * 60)))]),
+        ex.max_open_positions > 0 ? li("Højst ", b(num(ex.max_open_positions)), " åbne positioner")
+          : li("Åbne positioner: ", b("ingen grænse"), " (kun kontanterne sætter loft)"),
+        li("Karantæne efter salg: ", b(ex.reentry_cooldown_minutes > 0 ? duration(ex.reentry_cooldown_minutes * 60) : "ingen"))]),
       group("Risk – beskytter", [
         li("Stop ", b("−" + num(rk.stop_loss_pct) + " %"), " fra købskursen, sat ved købet"),
         li("Trailing stop aktiveres ved ", b("+" + num(rk.trail_trigger_pct) + " %")),

@@ -36,9 +36,11 @@ class _Book:
     def ingest(self, *a): return []
 
 
-def passing_plan(src) -> RiskPlan:
-    c = candidate(mint="GOOD", symbol="GOOD")
-    fp = FilterPass(candidate=c, checks={}, jupiter=src.jup.tokens_["GOOD"])
+def passing_plan(src, mint="GOOD") -> RiskPlan:
+    c = candidate(mint=mint, symbol=mint)
+    src.jup.tokens_.setdefault(mint, src.jup.tokens_["GOOD"])
+    src.jup.price.setdefault(mint, 0.001)
+    fp = FilterPass(candidate=c, checks={}, jupiter=src.jup.tokens_[mint])
     sc = Analyst(AnalystConfig(), src, _Book()).score(fp, trades(n_real=150, n_sells=40), time.time())
     assert sc.passed, sc.components
     return Risk(RiskConfig(), AnalystConfig()).plan(sc)
@@ -115,7 +117,31 @@ class ExecutorTests(unittest.TestCase):
         self.assertLess(closed.pnl_usd, 0)
         self.assertEqual(closed.status, "closed")
         self.assertAlmostEqual(ex2.cash, 10_000 + closed.pnl_usd, places=4)
-        self.assertTrue(ex2.in_cooldown("GOOD"))
+        self.assertFalse(ex2.in_cooldown("GOOD"))                      # no cooldown by default ...
+        fill, again = ex2.enter(passing_plan(self.src))                # ... so it may be bought straight back
+        self.assertEqual(again.mint, "GOOD")
+
+    def test_cooldown_and_position_limit_still_work_when_configured(self):
+        ex = Executor(ExecutorConfig(reentry_cooldown_minutes=120, max_open_positions=1),
+                      self.src, self.store, self.risk)
+        fill, pos = ex.enter(passing_plan(self.src))
+        other = passing_plan(self.src, mint="OTHER")
+        self.assertIn("max open positions", ex.enter(other).reasons[0])
+        d = self.risk.evaluate(ex.open_positions()[0], 0.0005)
+        ex.apply(d)
+        ex.exit(d.exit)
+        self.assertTrue(ex.in_cooldown("GOOD"))
+        self.assertIn("cooldown", ex.enter(passing_plan(self.src)).reasons[0])
+
+    def test_no_position_limit_by_default_cash_is_the_cap(self):
+        opened = 0
+        for i in range(20):
+            out = self.ex.enter(passing_plan(self.src, mint=f"C{i}"))
+            if isinstance(out, tuple):
+                opened += 1
+        self.assertGreater(opened, 10)                                 # past the old limit of 10
+        self.assertLess(self.ex.cash, 25)                              # stopped only when the cash ran out
+        self.assertGreaterEqual(self.ex.cash, 0)
 
 
 class SmartWalletTests(unittest.TestCase):
