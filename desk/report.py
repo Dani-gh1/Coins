@@ -108,6 +108,38 @@ def build_report(store: Store, run_id: str | None = None) -> str:
             if len(seen) >= 25:
                 break
         out.append("")
+    out.append("## Every coin the desk evaluated\n")
+    coins: dict[str, dict] = {}
+    for r in store.query(f"SELECT ts, mint, symbol FROM events WHERE kind='candidate'"
+                         f"{' AND run_id=?' if run_id else ''}", params):
+        d = coins.setdefault(r["mint"], {"symbol": r["symbol"], "first": r["ts"], "last": r["ts"],
+                                         "evals": 0, "reasons": Counter(), "best": None, "trades": 0, "pnl": 0.0})
+        d["evals"] += 1
+        d["last"] = r["ts"]
+    for k in store.query(f"SELECT mint, stage, reasons FROM kills {where}", params):
+        if k["mint"] in coins:
+            for r in json.loads(k["reasons"]):
+                code = "score < 70" if k["stage"] == "analyst" else r.split(":", 1)[0]
+                if k["stage"] == "executor":
+                    code = f"executor: {r}" if not r.startswith("price impact") else "executor: price impact"
+                coins[k["mint"]]["reasons"][code] += 1
+    for s in store.query(f"SELECT mint, MAX(score) AS best FROM scores {where} GROUP BY mint", params):
+        if s["mint"] in coins:
+            coins[s["mint"]]["best"] = s["best"]
+    for p in open_pos + closed:
+        if p["mint"] in coins:
+            coins[p["mint"]]["trades"] += 1
+            coins[p["mint"]]["pnl"] += p["pnl_usd"] or 0.0
+    out.append("| coin | mint | first seen | last seen | checks | best score | trades | what stopped it (times) |")
+    out.append("|---|---|---|---|---|---|---|---|")
+    for mint, d in sorted(coins.items(), key=lambda kv: kv[1]["first"]):
+        why = ", ".join(f"{code} ({n})" for code, n in d["reasons"].most_common(3)) or "-"
+        best = "-" if d["best"] is None else f"{d['best']:.1f}"
+        traded = f"{d['trades']} ({_usd(d['pnl'])})" if d["trades"] else "-"
+        out.append(f"| {d['symbol']} | `{mint[:6]}…` | {_ts(d['first'])} | {_ts(d['last'])} | {d['evals']} | "
+                   f"{best} | {traded} | {why} |")
+    out.append("")
+
     out.append("## Smart-wallet book\n")
     out.append(", ".join(f"{r['source']}: {r['n']}" for r in smart) or "empty")
     out.append("")
