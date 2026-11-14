@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from pathlib import Path
 
 SCHEMA = """
@@ -84,6 +85,42 @@ class Store:
         self.execute("INSERT INTO account(key, value) VALUES(?, ?) "
                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                      (key, json.dumps(value)))
+
+    # ---- portable state ------------------------------------------------------
+    # The paper book (cash, every position, learned wallets) as plain JSON, small enough to
+    # commit. A desk started on an empty database restores from it, so losing the machine
+    # does not reset the account.
+    def export_state(self) -> dict:
+        return {
+            "version": 1,
+            "saved_ts": time.time(),
+            "account": {k: self.get_account(k) for k in ("starting_equity", "cash")},
+            "positions": [dict(r) for r in self.query("SELECT * FROM positions ORDER BY opened_ts")],
+            "smart_wallets": [dict(r) for r in self.query("SELECT * FROM smart_wallets")],
+        }
+
+    def import_state(self, state: dict) -> bool:
+        """Load an exported state into an empty database. No-op (False) if one already has an account."""
+        if self.get_account("starting_equity") is not None:
+            return False
+        account = state.get("account") or {}
+        if account.get("starting_equity") is None or account.get("cash") is None:
+            return False
+        with self.lock:
+            for table in ("positions", "smart_wallets"):
+                cols = [r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")]
+                for row in state.get(table) or []:
+                    self.conn.execute(
+                        f"INSERT OR REPLACE INTO {table}({','.join(cols)}) VALUES({','.join('?' * len(cols))})",
+                        [row.get(c) for c in cols])
+            for ts, equity in state.get("equity_curve") or []:
+                self.conn.execute(
+                    "INSERT INTO events(ts, run_id, agent, kind, payload) VALUES(?, 'restored', 'desk', 'cycle', ?)",
+                    (ts, json.dumps({"equity": equity})))
+            self.conn.commit()
+        self.set_account("starting_equity", account["starting_equity"])
+        self.set_account("cash", account["cash"])
+        return True
 
     def close(self) -> None:
         with self.lock:

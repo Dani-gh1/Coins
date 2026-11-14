@@ -71,7 +71,9 @@ class ExecutorConfig:
     max_position_pct: float = 8.0             # hard cap per trade, % of equity
     max_open_positions: int = 10
     min_order_usd: float = 25.0
-    max_price_impact_pct: float = 2.0         # shrink the order until the quote fits this
+    # Optional cap on Jupiter's quoted price impact: shrink the order until the quote fits.
+    # 0 = no cap (default): every order is the full max_position_pct, whatever it costs.
+    max_price_impact_pct: float = 0.0
     quote_slippage_bps: int = 500
     tx_cost_usd: float = 0.05                 # network + priority fee per swap (paper)
     reentry_cooldown_minutes: float = 120.0

@@ -1,4 +1,4 @@
-"""Executor: the paper broker. Max 8% of equity per trade.
+"""Executor: the paper broker. Every order is 8% of equity (the hard maximum per trade).
 
 Hard handoff: an order is only accepted with an approved RiskPlan whose ScoreCard passed.
 Fills are priced off live Jupiter quotes for the exact size (USDC <-> token), so price
@@ -99,13 +99,18 @@ class Executor:
             return max(0.0, min(cap, self.cash - self.cfg.tx_cost_usd))
 
     def _fit_size(self, mint: str, size: float, max_quotes: int = 5):
-        """Largest order (<= size) whose Jupiter quote stays within max_price_impact_pct.
-
-        Quoted impact is roughly a fee floor plus a slope in size, so after two quotes we
-        solve the line for the target size; before that we scale down proportionally.
+        """Quote the order. With max_price_impact_pct = 0 (the default) the full size is taken
+        as quoted. With a cap set, find the largest order (<= size) whose quote stays within it:
+        quoted impact is roughly a fee floor plus a slope in size, so after two quotes we solve
+        the line for the target size; before that we scale down proportionally.
         Returns (quote, size, impact_pct, tried) - quote is None if nothing fits."""
         cap = self.cfg.max_price_impact_pct
         tried: list[tuple[float, float]] = []
+        if cap <= 0:
+            quote = self.src.jup.buy_quote(mint, size, self.cfg.quote_slippage_bps)
+            if quote is None:
+                return None, size, None, tried
+            return quote, size, float(quote.get("priceImpactPct") or 0) * 100.0, tried
         for _ in range(max_quotes):
             if size < self.cfg.min_order_usd:
                 break

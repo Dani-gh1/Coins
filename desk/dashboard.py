@@ -67,7 +67,7 @@ def _drop_restarts(items: list[dict], within_s: float = 120.0) -> list[dict]:
     return out
 
 
-def _equity_points(rows: list, start_ts: float | None, start_equity: float, max_points: int = 600) -> list:
+def equity_points(rows: list, start_ts: float | None, start_equity: float, max_points: int = 600) -> list:
     """Compress the per-cycle equity series: keep the points around every change."""
     pts: list[list[float]] = []
     prev = None
@@ -151,7 +151,7 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
     span = q("SELECT MIN(ts) AS a, MAX(ts) AS b FROM events")[0]
     last = q("SELECT run_id FROM events ORDER BY id DESC LIMIT 1")
     cycles = q("SELECT COUNT(*) AS n FROM events WHERE kind='cycle'")[0]["n"]
-    curve = _equity_points(
+    curve = equity_points(
         [(r["ts"], r["eq"]) for r in q(
             "SELECT ts, json_extract(payload, '$.equity') AS eq FROM events WHERE kind='cycle' ORDER BY ts")],
         span["a"], start_equity)

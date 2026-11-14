@@ -33,7 +33,7 @@ Agents only talk through the immutable messages in `desk/messages.py`. The Execu
 | | kill: bundled launch > 10% of supply | RugCheck insider networks (linked-wallet clusters) + insider-flagged holders |
 | | kill: already +80% in 1h | DexScreener |
 | **Analyst** | score 0–100, only 70+ passes | see below |
-| **Executor** | max 8% of equity per trade (hard cap in code); order shrinks until Jupiter price impact ≤ 2% | Jupiter quote API |
+| **Executor** | 8% of equity per trade (the hard cap in code). Optional `executor.max_price_impact_pct` shrinks an order until its quote fits; it is off by default | Jupiter quote API |
 | **Risk** | stop −6% from the fill, set in the same step as the fill; trailing stop arms at +12% and trails 6% under the high | Jupiter price API (DexScreener fallback) |
 | **Logger** | every candidate, kill (with every failed rule and its measured value), score, plan, fill, exit | `runs/desk.db`, `runs/<run>/events.jsonl` |
 
@@ -74,7 +74,7 @@ python -m desk once                           # a single scan cycle
 python -m desk report --run-id night1         # P&L, trades, kill table, top scores
 python -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
 python -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
-python -m unittest discover -s tests -t .     # 42 offline tests
+python -m unittest discover -s tests -t .     # 44 offline tests
 ```
 
 ### Dashboard
@@ -98,9 +98,33 @@ sqlite3 runs/desk.db "select symbol, round(score,1), components from scores orde
 sqlite3 runs/desk.db "select symbol, cost_usd, pnl_usd, exit_reason from positions"
 ```
 
+### Running it around the clock
+
+`python -m desk run --dashboard 8787` with no `--hours` runs until you stop it, so 24/7 is a
+matter of keeping that one command alive on a machine that stays on. With systemd:
+
+```ini
+# /etc/systemd/system/memecoin-desk.service
+[Service]
+WorkingDirectory=/path/to/Coins
+ExecStart=/usr/bin/python3 -m desk run --dashboard 8787
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+```
+
+Every scan cycle the desk also writes `runs/state.json`: cash, every position with its stop,
+learned wallets and the equity curve. A desk started with an empty database restores from that
+file, so the paper book survives a lost machine as long as the file was kept (it is small
+enough to commit).
+
 ## Know before trusting the numbers
 
 - **Paper only.** `executor.mode` must be `paper`. There is no live broker and no key handling.
+- Orders are not shrunk to fit the pool. An 8% order on a $40–60k pool pays roughly 3–4.5%
+  in price impact going in and again coming out, and the −6% stop is measured from that fill,
+  so it sits only about 2% under the market price at entry.
 - Fills use real Jupiter quotes for the exact size, so price impact and pool fees are real.
   Latency, MEV, failed transactions and priority-fee spikes are not modelled. Each swap is
   charged a flat $0.05.

@@ -5,7 +5,7 @@ import urllib.request
 from pathlib import Path
 
 from desk.config import DeskConfig
-from desk.dashboard import DashboardServer, _drop_restarts, _equity_points, rule_code, snapshot
+from desk.dashboard import DashboardServer, _drop_restarts, equity_points, rule_code, snapshot
 from desk.desk import Desk
 
 from tests.test_executor_desk import sources
@@ -59,6 +59,32 @@ class SnapshotTests(unittest.TestCase):
         kinds = [a["kind"] for a in snap["activity"]]
         self.assertEqual(kinds[:3], ["fill_sell", "exit_signal", "fill_buy"])
 
+    def test_paper_book_survives_losing_the_database(self):
+        self.desk.scan_cycle()                       # buys GOOD and writes state.json
+        self.src.jup.price["GOOD"] = 0.00115         # +15%: trail arms, stop ratchets up
+        self.desk.risk_tick()
+        self.desk.scan_cycle()
+        before = snapshot(self.db)
+        state = (Path(self.tmp.name) / "state.json").read_text()
+
+        with tempfile.TemporaryDirectory() as fresh:  # a new machine: only state.json comes along
+            (Path(fresh) / "state.json").write_text(state)
+            desk2 = Desk(DeskConfig(data_dir=fresh, smart_wallet_seed_file="/nonexistent"),
+                         "after", echo=False, sources=self.src)
+            try:
+                self.assertAlmostEqual(desk2.executor.cash, self.desk.executor.cash)
+                pos, old = desk2.executor.open_positions()[0], self.desk.executor.open_positions()[0]
+                self.assertEqual((pos.mint, pos.trail_active), (old.mint, True))
+                self.assertAlmostEqual(pos.stop_price, old.stop_price)
+                after = snapshot(Path(fresh) / "desk.db")
+                self.assertAlmostEqual(after["account"]["equity"], before["account"]["equity"], places=6)
+                self.assertEqual(after["equity_curve"][0][1], before["equity_curve"][0][1])
+                # restoring never overwrites an existing book
+                self.assertFalse(desk2.store.import_state(json.loads(state)))
+            finally:
+                desk2.log.close()
+                desk2.store.close()
+
     def test_http_serves_page_and_state(self):
         self.desk.scan_cycle()
         server = DashboardServer(self.db, "127.0.0.1", 0)
@@ -89,7 +115,7 @@ class HelperTests(unittest.TestCase):
 
     def test_equity_curve_keeps_only_the_steps(self):
         rows = [(t, 100.0) for t in range(10, 60, 10)] + [(60, 110.0), (70, 110.0), (80, 110.0)]
-        self.assertEqual(_equity_points(rows, 0, 100.0),
+        self.assertEqual(equity_points(rows, 0, 100.0),
                          [[0, 100.0], [50, 100.0], [60, 110.0], [80, 110.0]])
 
     def test_restarts_are_hidden_but_real_stops_stay(self):

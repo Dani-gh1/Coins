@@ -11,6 +11,8 @@ Everything is written by the Logger.
 """
 from __future__ import annotations
 
+import json
+import os
 import signal
 import threading
 import time
@@ -24,6 +26,7 @@ from .agents.logger import Logger
 from .agents.risk import Risk
 from .agents.scout import Scout
 from .config import DeskConfig
+from .dashboard import equity_points
 from .messages import Deferral, Kill, ScoreCard
 from .smart_wallets import SmartWalletBook
 from .sources import Sources
@@ -37,6 +40,8 @@ class Desk:
         data_dir = Path(cfg.data_dir)
         self.run_dir = data_dir / run_id
         self.store = Store(data_dir / "desk.db")
+        self.state_path = data_dir / "state.json"
+        restored = self._restore_state()
         self.log = Logger(self.store, self.run_dir / "events.jsonl", run_id, echo=echo)
         self.src = sources or Sources()
         self.book = SmartWalletBook(self.store, cfg.smart_wallet_seed_file)
@@ -52,6 +57,29 @@ class Desk:
                 "SELECT mint, MAX(recheck_at) AS t FROM kills GROUP BY mint HAVING t > ?", (now,))}
         self.learner_swept: dict[str, float] = {}
         self.cycle = 0
+        if restored:
+            self.log.event("desk", "restored", {"from": str(self.state_path), "equity": self.executor.equity(),
+                                                "positions": len(self.executor.positions)},
+                           line=f"restored the paper book from {self.state_path} "
+                                f"(equity ${self.executor.equity():,.2f})")
+
+    # ---- portable state (see Store.export_state) ------------------------------
+    def _restore_state(self) -> bool:
+        if not self.state_path.exists():
+            return False
+        try:
+            return self.store.import_state(json.loads(self.state_path.read_text()))
+        except (ValueError, OSError):
+            return False
+
+    def save_state(self) -> None:
+        state = self.store.export_state()
+        rows = self.store.query("SELECT ts, json_extract(payload, '$.equity') AS eq FROM events "
+                                "WHERE kind='cycle' ORDER BY ts")
+        state["equity_curve"] = equity_points([(r["ts"], r["eq"]) for r in rows], None, 0.0)
+        tmp = self.state_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, indent=1))
+        os.replace(tmp, self.state_path)
 
     # ---- scan loop -------------------------------------------------------------
     def scan_cycle(self) -> dict:
@@ -108,6 +136,7 @@ class Desk:
                 stats["entered"] += 1
 
         self._learn()
+        self.save_state()
         stats.update(cycle=self.cycle, seconds=round(time.time() - t0, 1),
                      equity=round(self.executor.equity(), 2), cash=round(self.executor.cash, 2),
                      open_positions=len(self.executor.positions), smart_wallets=self.book.size())
@@ -231,6 +260,7 @@ class Desk:
         finally:
             self.stop_event.set()
             risk_thread.join(timeout=30)
+            self.save_state()
             self.log.event("desk", "stop", {"equity": self.executor.equity(),
                                             "open_positions": len(self.executor.positions),
                                             "http": dict(self.src.http.stats)},
