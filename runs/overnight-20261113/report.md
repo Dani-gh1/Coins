@@ -1,39 +1,46 @@
 # Memecoin desk report - run overnight-20261113
 
-Generated 2026-11-14 00:11 UTC. **Paper trading only.**
+Generated 2026-11-14 00:59 UTC. **Paper trading only.**
 
-Window: 11-13 19:07 -> 11-14 00:10 UTC (5.1 h, 304 scan cycles)
+Window: 11-13 19:07 -> 11-14 00:59 UTC (5.9 h, 352 scan cycles)
 
 ## Account
 
 | starting equity | cash | open MTM | equity | return | realised P&L | closed trades | win rate |
 |---|---|---|---|---|---|---|---|
-| $10,000.00 | $10,000.00 | $0.00 | $10,000.00 | +0.00% | $0.00 | 0 | - |
+| $10,000.00 | $10,052.01 | $0.00 | $10,052.01 | +0.52% | $52.01 | 1 | 100% |
+
+## Closed trades
+
+| symbol | opened | closed | score | cost | proceeds | P&L | % | exit |
+|---|---|---|---|---|---|---|---|---|
+| CSI | 11-14 00:16 | 11-14 00:18 | 84.2 | $290.58 | $342.58 | $52.01 | +17.9% | trailing_stop |
 
 ## Kills
 
-429 kill decisions across 22 distinct coins (filter 236, analyst 191, executor 2). A coin can fail several rules at once.
+472 kill decisions across 23 distinct coins (filter 261, analyst 208, executor 3). A coin can fail several rules at once.
 
 | stage | rule | times hit |
 |---|---|---|
-| filter | low_volume_1h | 211 |
-| analyst | score_below_70 | 191 |
-| filter | low_liquidity | 145 |
-| filter | already_pumped | 22 |
+| filter | low_volume_1h | 233 |
+| analyst | score_below_70 | 208 |
+| filter | low_liquidity | 158 |
+| filter | already_pumped | 25 |
 | filter | bundled | 2 |
 | filter | mint_authority | 1 |
 | filter | lp_unlocked | 1 |
 | filter | top10_concentration | 1 |
 | executor | price impact 2.38% > 2.0% | 1 |
 | executor | price impact 2.21% > 2.0% | 1 |
+| executor | re-entry cooldown | 1 |
 
 ## Analyst scores
 
-193 scorecards, 2 at 70+.
+212 scorecards, 4 at 70+.
 
 | symbol | when | score | momentum | unique buyers | buy/sell | holder growth | liq/mcap | smart wallets |
 |---|---|---|---|---|---|---|---|---|
-| CSI | 11-13 23:50 | **72.0** | 22 | 100 | 100 | 72 | 73 | - |
+| CSI | 11-14 00:16 | **84.2** | 87 | 100 | 100 | 89 | 39 | - |
 | SPEED | 11-13 22:29 | **63.6** | 70 | 42 | 81 | 60 | 70 | - |
 | WANTED | 11-13 21:03 | **56.6** | 74 | 74 | 42 | 25 | 57 | - |
 | inuhao | 11-13 21:01 | **52.9** | 86 | 75 | 0 | 9 | 75 | - |
