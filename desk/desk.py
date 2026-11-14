@@ -65,15 +65,34 @@ class Desk:
 
     # ---- portable state (see Store.export_state) ------------------------------
     def _restore_state(self) -> bool:
+        self._saved_key = None
         if not self.state_path.exists():
             return False
         try:
-            return self.store.import_state(json.loads(self.state_path.read_text()))
-        except (ValueError, OSError):
+            state = json.loads(self.state_path.read_text())
+            self._saved_key = self._state_key(state)
+            return self.store.import_state(state)
+        except (ValueError, OSError, KeyError, TypeError):
             return False
+
+    @staticmethod
+    def _state_key(state: dict) -> str:
+        """What makes a state worth rewriting: cash, the set of positions, and each stop.
+        Marks and timestamps move every few seconds and are deliberately left out, so the
+        file (which is meant to be committed) only changes when the book does."""
+        return json.dumps([
+            state["account"],
+            [(p["id"], p["status"], p["stop_price"], bool(p["trail_active"]), p["pnl_usd"])
+             for p in state["positions"]],
+            sorted(w["wallet"] for w in state["smart_wallets"]),
+        ])
 
     def save_state(self) -> None:
         state = self.store.export_state()
+        key = self._state_key(state)
+        if key == self._saved_key and self.state_path.exists():
+            return
+        self._saved_key = key
         rows = self.store.query("SELECT ts, json_extract(payload, '$.equity') AS eq FROM events "
                                 "WHERE kind='cycle' ORDER BY ts")
         state["equity_curve"] = equity_points([(r["ts"], r["eq"]) for r in rows], None, 0.0)

@@ -65,7 +65,10 @@ class SnapshotTests(unittest.TestCase):
         self.desk.risk_tick()
         self.desk.scan_cycle()
         before = snapshot(self.db)
-        state = (Path(self.tmp.name) / "state.json").read_text()
+        state_file = Path(self.tmp.name) / "state.json"
+        state = state_file.read_text()
+        self.desk.scan_cycle()                       # nothing in the book changed ...
+        self.assertEqual(state_file.read_text(), state)   # ... so the file is left alone
 
         with tempfile.TemporaryDirectory() as fresh:  # a new machine: only state.json comes along
             (Path(fresh) / "state.json").write_text(state)

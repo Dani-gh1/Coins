@@ -1,8 +1,8 @@
 # Memecoin desk report - run paper-20261114
 
-Generated 2026-11-14 15:44 UTC. **Paper trading only.**
+Generated 2026-11-14 15:46 UTC. **Paper trading only.**
 
-Window: 11-14 15:43 -> 11-14 15:44 UTC (0.0 h, 1 scan cycles)
+Window: 11-14 15:43 -> 11-14 15:46 UTC (0.0 h, 3 scan cycles)
 
 ## Account
 
