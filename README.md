@@ -72,8 +72,19 @@ python -m desk run --hours 10                 # paper desk overnight
 python -m desk run --hours 10 --run-id night1 --config my.toml
 python -m desk once                           # a single scan cycle
 python -m desk report --run-id night1         # P&L, trades, kill table, top scores
-python -m unittest discover -s tests -t .     # 35 offline tests
+python -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
+python -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
+python -m unittest discover -s tests -t .     # 42 offline tests
 ```
+
+### Dashboard
+
+`python -m desk dashboard` serves a read-only page over `runs/desk.db` that refreshes every
+5 seconds: account value and return, the equity curve, open positions with their stops, every
+closed trade with its gain or loss in % and $, how many coins reached each stage, which rules
+killed them, the coins closest to a buy, and the latest events. It works on a phone and in
+dark mode, has no external assets, and binds to localhost unless you pass `--host`. The page
+text is Danish. It shows what the desk did. It cannot place orders or move money.
 
 The desk restarts where it stopped. Cash, open positions with their stops, cooldowns and the
 smart-wallet book are all in `runs/desk.db`. Every threshold is in `desk/config.py`, and

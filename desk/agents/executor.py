@@ -170,7 +170,9 @@ class Executor:
             entry_price=entry, stop_price=Risk.initial_stop(entry, plan), high_price=entry,
             trail_active=False, trail_trigger_price=Risk.trail_trigger(entry, plan),
             trail_distance_pct=plan.trail_distance_pct, score=plan.scorecard.score, plan_id=plan.id,
-            opened_ts=now, last_price=c.price_usd or entry, last_price_ts=now)
+            # First mark = the mid price the quote implies (fill minus its impact); the Scout's
+            # price is a scan old by now, which on a fast mover misvalues the fresh position.
+            opened_ts=now, last_price=entry / (1.0 + impact / 100.0), last_price_ts=now)
         with self.lock:
             if spent + self.cfg.tx_cost_usd > self.cash + 1e-9:
                 return self._reject(plan, "insufficient cash at fill time")
