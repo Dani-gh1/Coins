@@ -126,10 +126,9 @@ enough to commit).
 - Orders are not shrunk to fit the pool. An 8% order on a $40–60k pool pays roughly 3–4.5%
   in price impact going in and again coming out, and the −6% stop is measured from that fill,
   so it sits only about 2% under the market price at entry.
-- By default there is no cap on open positions and no cooldown after a sale. Cash is the only
-  limit (about twelve 8% positions), and a coin that was just stopped out can be bought again on
-  the next scan, paying the round-trip cost again. `executor.max_open_positions` and
-  `executor.reentry_cooldown_minutes` bring either back.
+- By default there is no cap on open positions: cash is the only limit (about twelve 8%
+  positions). `executor.max_open_positions` brings a cap back. After a sale the same coin is
+  not bought again for two hours (`executor.reentry_cooldown_minutes`).
 - Fills use real Jupiter quotes for the exact size, so price impact and pool fees are real.
   Latency, MEV, failed transactions and priority-fee spikes are not modelled. Each swap is
   charged a flat $0.05.

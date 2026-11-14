@@ -117,12 +117,12 @@ class ExecutorTests(unittest.TestCase):
         self.assertLess(closed.pnl_usd, 0)
         self.assertEqual(closed.status, "closed")
         self.assertAlmostEqual(ex2.cash, 10_000 + closed.pnl_usd, places=4)
-        self.assertFalse(ex2.in_cooldown("GOOD"))                      # no cooldown by default ...
-        fill, again = ex2.enter(passing_plan(self.src))                # ... so it may be bought straight back
-        self.assertEqual(again.mint, "GOOD")
+        self.assertTrue(ex2.in_cooldown("GOOD"))                       # two hours by default
+        self.assertIn("cooldown", ex2.enter(passing_plan(self.src)).reasons[0])
+        self.assertFalse(ex2.in_cooldown("GOOD", now=closed.closed_ts + 121 * 60))
 
-    def test_cooldown_and_position_limit_still_work_when_configured(self):
-        ex = Executor(ExecutorConfig(reentry_cooldown_minutes=120, max_open_positions=1),
+    def test_cooldown_can_be_switched_off_and_a_position_limit_set(self):
+        ex = Executor(ExecutorConfig(reentry_cooldown_minutes=0, max_open_positions=1),
                       self.src, self.store, self.risk)
         fill, pos = ex.enter(passing_plan(self.src))
         other = passing_plan(self.src, mint="OTHER")
@@ -130,8 +130,9 @@ class ExecutorTests(unittest.TestCase):
         d = self.risk.evaluate(ex.open_positions()[0], 0.0005)
         ex.apply(d)
         ex.exit(d.exit)
-        self.assertTrue(ex.in_cooldown("GOOD"))
-        self.assertIn("cooldown", ex.enter(passing_plan(self.src)).reasons[0])
+        self.assertFalse(ex.in_cooldown("GOOD"))
+        fill, again = ex.enter(passing_plan(self.src))                 # bought straight back
+        self.assertEqual(again.mint, "GOOD")
 
     def test_no_position_limit_by_default_cash_is_the_cap(self):
         opened = 0

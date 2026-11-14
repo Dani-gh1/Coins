@@ -38,7 +38,7 @@ smart_wallets = 0.15
 starting_equity_usd = 10000
 max_position_pct = 8          # hard-capped at 8 in code
 max_open_positions = 0        # 0 = no limit
-reentry_cooldown_minutes = 0  # 0 = may rebuy a coin right after selling it
+reentry_cooldown_minutes = 120  # wait this long after a sale before rebuying the coin (0 = off)
 max_price_impact_pct = 0      # 0 = no cap; e.g. 2 shrinks orders until the quote moves price <= 2%
 
 [risk]

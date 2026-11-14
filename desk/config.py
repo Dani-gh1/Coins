@@ -76,7 +76,7 @@ class ExecutorConfig:
     max_price_impact_pct: float = 0.0
     quote_slippage_bps: int = 500
     tx_cost_usd: float = 0.05                 # network + priority fee per swap (paper)
-    reentry_cooldown_minutes: float = 0.0     # 0 = a coin can be bought again right after a sale
+    reentry_cooldown_minutes: float = 120.0   # after a sale, wait this long before rebuying the coin (0 = off)
 
 
 @dataclass
