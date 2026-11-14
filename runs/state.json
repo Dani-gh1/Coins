@@ -1,6 +1,6 @@
 {
  "version": 1,
- "saved_ts": 1794671167.3686118,
+ "saved_ts": 1794673237.7331378,
  "account": {
   "starting_equity": 10000.0,
   "cash": 10055.707712000001
@@ -61,7 +61,17 @@
    "exit_reason": "trailing_stop"
   }
  ],
- "smart_wallets": [],
+ "smart_wallets": [
+  {
+   "wallet": "C2vVrgQQjFD6muoo8GmoDTTYB3x4MR9vx15bKbnJf8HF",
+   "source": "learned",
+   "wins": 2,
+   "losses": 0,
+   "realized_usd": 466.7485789537691,
+   "added_ts": 1794673237.6958704,
+   "updated_ts": 1794673237.6958704
+  }
+ ],
  "equity_curve": [
   [
    1794596913.9,
@@ -160,7 +170,7 @@
    10055.71
   ],
   [
-   1794671167.4,
+   1794673181.7,
    10055.71
   ]
  ]
