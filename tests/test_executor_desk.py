@@ -78,12 +78,19 @@ class ExecutorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Executor(ExecutorConfig(max_position_pct=10), self.src, self.store, self.risk)
 
-    def test_high_impact_shrinks_order(self):
-        self.src.jup.impact_pct = 3.0
+    def test_impact_that_never_fits_is_rejected(self):
+        self.src.jup.impact_pct = 3.0          # flat 3% at any size: nothing fits a 2% cap
         out = self.ex.enter(passing_plan(self.src))
-        # 3% impact > 2% cap -> resized, fake impact is constant so the retry still fails
         self.assertEqual(out.stage, "executor")
         self.assertIn("price impact", out.reasons[0])
+
+    def test_order_shrinks_to_fit_fee_floor_plus_slope(self):
+        # Shape measured live on a pump AMM pool: ~0.8% fee floor + ~0.3% per $100.
+        self.src.jup.impact_fn = lambda usd: 0.8 + 0.3 * usd / 100
+        fill, pos = self.ex.enter(passing_plan(self.src))
+        self.assertLessEqual(fill.impact_pct, 2.0)
+        self.assertGreater(fill.usd, 300)      # close to the ~$400 that fits, not a token order
+        self.assertLess(fill.usd, 400)
 
     def test_exit_books_pnl_and_survives_restart(self):
         fill, pos = self.ex.enter(passing_plan(self.src))

@@ -121,6 +121,7 @@ class FakeJup:
         self.tokens_ = tokens
         self.price = dict(prices)
         self.impact_pct = impact_pct
+        self.impact_fn = None          # optional: usd -> impact %, overrides impact_pct on buys
         self.fail_sells = False
 
     def discovery_mints(self):
@@ -134,9 +135,10 @@ class FakeJup:
 
     def buy_quote(self, mint, usd, slippage_bps):
         dec = self.tokens_[mint]["decimals"]
-        eff = self.price[mint] * (1 + self.impact_pct / 100)
+        impact = self.impact_fn(usd) if self.impact_fn else self.impact_pct
+        eff = self.price[mint] * (1 + impact / 100)
         return {"inAmount": str(int(usd * 1e6)), "outAmount": str(int(usd / eff * 10 ** dec)),
-                "priceImpactPct": str(self.impact_pct / 100)}
+                "priceImpactPct": str(impact / 100)}
 
     def sell_quote(self, mint, raw, slippage_bps):
         if self.fail_sells:

@@ -98,6 +98,36 @@ class Executor:
             cap = self.equity() * self.cfg.max_position_pct / 100.0
             return max(0.0, min(cap, self.cash - self.cfg.tx_cost_usd))
 
+    def _fit_size(self, mint: str, size: float, max_quotes: int = 5):
+        """Largest order (<= size) whose Jupiter quote stays within max_price_impact_pct.
+
+        Quoted impact is roughly a fee floor plus a slope in size, so after two quotes we
+        solve the line for the target size; before that we scale down proportionally.
+        Returns (quote, size, impact_pct, tried) - quote is None if nothing fits."""
+        cap = self.cfg.max_price_impact_pct
+        tried: list[tuple[float, float]] = []
+        for _ in range(max_quotes):
+            if size < self.cfg.min_order_usd:
+                break
+            quote = self.src.jup.buy_quote(mint, size, self.cfg.quote_slippage_bps)
+            if quote is None:
+                break
+            impact = float(quote.get("priceImpactPct") or 0) * 100.0
+            tried.append((size, impact))
+            if impact <= cap:
+                return quote, size, impact, tried
+            target = cap * 0.95
+            nxt = size * target / impact
+            if len(tried) >= 2 and tried[-2][0] != size:
+                (s1, i1), (s2, i2) = tried[-2], tried[-1]
+                slope = (i1 - i2) / (s1 - s2)
+                floor = i2 - slope * s2
+                # A volatile pool can move between quotes and break the line; only trust
+                # a fit that slopes up from a floor below the target.
+                nxt = (target - floor) / slope if slope > 0 and floor < target else size * 0.7
+            size = min(nxt, size * 0.9)
+        return None, size, None, tried
+
     def enter(self, plan: RiskPlan) -> tuple[Fill, Position] | Kill:
         self._validate(plan)
         c = plan.scorecard.candidate
@@ -120,21 +150,13 @@ class Executor:
         if decimals is None:
             return self._reject(plan, "unknown token decimals")
 
-        quote = self.src.jup.buy_quote(c.mint, size, self.cfg.quote_slippage_bps)
+        quote, size, impact, tried = self._fit_size(c.mint, size)
         if quote is None:
-            return self._reject(plan, "no Jupiter route for buy")
-        impact = float(quote.get("priceImpactPct") or 0) * 100.0
-        if impact > self.cfg.max_price_impact_pct:
-            size = size * self.cfg.max_price_impact_pct / impact * 0.9
-            if size < self.cfg.min_order_usd:
-                return self._reject(plan, f"price impact {impact:.2f}% too high for minimum size")
-            quote = self.src.jup.buy_quote(c.mint, size, self.cfg.quote_slippage_bps)
-            if quote is None:
-                return self._reject(plan, "no Jupiter route for resized buy")
-            impact = float(quote.get("priceImpactPct") or 0) * 100.0
-            if impact > self.cfg.max_price_impact_pct:
-                return self._reject(plan, f"price impact {impact:.2f}% > {self.cfg.max_price_impact_pct}%",
-                                    {"size_usd": size})
+            if not tried:
+                return self._reject(plan, "no Jupiter route for buy")
+            return self._reject(plan, f"price impact {tried[-1][1]:.2f}% > {self.cfg.max_price_impact_pct}% "
+                                      f"even at ${tried[-1][0]:.0f}",
+                                {"quotes": [{"usd": round(s, 2), "impact_pct": round(i, 3)} for s, i in tried]})
         spent = int(quote["inAmount"]) / 1e6
         qty_raw = int(quote["outAmount"])
         qty = qty_raw / 10 ** int(decimals)
