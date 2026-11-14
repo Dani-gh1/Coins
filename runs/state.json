@@ -1,9 +1,9 @@
 {
  "version": 1,
- "saved_ts": 1794682964.0523386,
+ "saved_ts": 1794698382.8166883,
  "account": {
   "starting_equity": 10000.0,
-  "cash": 10055.707712000001
+  "cash": 9251.201096
  },
  "positions": [
   {
@@ -59,6 +59,33 @@
    "proceeds_usd": 73.592084,
    "pnl_usd": 3.7006429999999995,
    "exit_reason": "trailing_stop"
+  },
+  {
+   "id": "pos_8d18568a5d",
+   "mint": "85RhcSEMy15SNhFLmSArNm7udPKXVagVgsq4YmSopump",
+   "symbol": "bill",
+   "pair_address": "95ytGFRcBgT1d8ioAQkPtXEA6QrgJ5omgiMHnyheRxdP",
+   "decimals": 6,
+   "qty": 1401407.104631,
+   "qty_raw": 1401407104631,
+   "cost_usd": 804.506616,
+   "entry_price": 0.000574034920574931,
+   "stop_price": 0.0005395928253404351,
+   "high_price": 0.000574034920574931,
+   "trail_active": 0,
+   "trail_trigger_price": 0.0006429191110439228,
+   "trail_distance_pct": 6.0,
+   "score": 70.24,
+   "plan_id": "plan_30f57ffc9d",
+   "opened_ts": 1794698377.9154162,
+   "last_price": 0.0005593024710486304,
+   "last_price_ts": 1794698380.3577023,
+   "status": "open",
+   "closed_ts": null,
+   "exit_price": null,
+   "proceeds_usd": null,
+   "pnl_usd": null,
+   "exit_reason": null
   }
  ],
  "smart_wallets": [
@@ -179,7 +206,7 @@
    10055.71
   ],
   [
-   1794682851.0,
+   1794698316.6,
    10055.71
   ]
  ]
