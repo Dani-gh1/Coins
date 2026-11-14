@@ -64,6 +64,17 @@ class Logger:
             "vol_h1": c.volume.get("h1"), "pc_h1": c.price_change.get("h1"),
             "via": list(c.discovered_via)})
 
+    def window(self, candidates: list[Candidate]) -> None:
+        """Replace the snapshot of coins currently inside the Scout's window (for the dashboard)."""
+        now = time.time()
+        self.store.replace_all(
+            "scan_window",
+            ["mint", "symbol", "name", "pair_address", "dex_id", "age_h", "mcap", "liq",
+             "vol_h1", "pc_h1", "pc_m5", "price", "ts"],
+            [(c.mint, c.symbol, c.name, c.pair_address, c.dex_id, c.pair_age_hours, c.mcap_usd,
+              c.liquidity_usd, c.volume.get("h1", 0.0), c.price_change.get("h1", 0.0),
+              c.price_change.get("m5", 0.0), c.price_usd, now) for c in candidates])
+
     def kill(self, k: Kill) -> None:
         self.store.execute(
             "INSERT INTO kills(ts, run_id, stage, mint, symbol, reasons, metrics, recheck_at) "

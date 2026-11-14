@@ -48,6 +48,17 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(rules[("filter", "bundled")], 1)
         self.assertEqual(snap["kill_decisions"], 2)
         self.assertTrue(snap["top_scores"][0]["traded"])
+        # the coins inside the window right now, each with the desk's latest verdict
+        verdict = {c["symbol"]: c["status"] for c in snap["window"]}
+        self.assertEqual(verdict["GOOD"]["kind"], "held")
+        self.assertEqual([r["code"] for r in verdict["THIN"]["reasons"]], ["low_liquidity"])
+        self.assertIn("bundled", [r["code"] for r in verdict["BAD"]["reasons"]])
+        self.assertGreater(verdict["BAD"]["recheck_at"], snap["generated_ts"])
+        # what the buy cost and the scorecard behind it travel with the position
+        self.assertAlmostEqual(pos["buy_impact_pct"], 0.5)
+        self.assertEqual(set(pos["components"]), {"momentum", "unique_buyers", "buy_sell", "holder_growth",
+                                                  "liq_mcap", "smart_wallets"})
+        self.assertEqual(pos["pair_address"], "PAIR_GOOD")
 
         self.src.jup.price["GOOD"] = 0.0005          # collapse -> stop loss
         self.desk.risk_tick()
@@ -60,6 +71,8 @@ class SnapshotTests(unittest.TestCase):
         acct = snap["account"]
         self.assertAlmostEqual(trade["account_pct"], acct["return_pct"], places=6)   # the only trade
         self.assertAlmostEqual(trade["stake_pct"], 8.0, delta=0.01)
+        self.assertAlmostEqual(trade["sell_impact_pct"], 0.5)
+        self.assertEqual(snap["window"], [c for c in snap["window"] if c["status"]["kind"] != "held"])
         sell = snap["activity"][0]
         self.assertAlmostEqual(sell["account_pct"], trade["account_pct"], places=6)
         self.assertAlmostEqual(snap["activity"][2]["stake_pct"], 8.0, delta=0.01)
@@ -109,6 +122,11 @@ class SnapshotTests(unittest.TestCase):
                 self.assertIn(b"Memecoin-desk", r.read())
             with opener.open(base + "/api/state") as r:
                 self.assertEqual(json.load(r)["account"]["closed_trades"], 0)
+            configured = DashboardServer(self.db, "127.0.0.1", 0, rules={"risk": {"stop_loss_pct": 6.0}})
+            try:
+                self.assertEqual(configured.state()["rules"]["risk"]["stop_loss_pct"], 6.0)
+            finally:
+                configured.server_close()
             with self.assertRaises(urllib.error.HTTPError) as err:
                 opener.open(base + "/desk.db")
             self.assertEqual(err.exception.code, 404)

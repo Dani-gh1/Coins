@@ -81,23 +81,23 @@ python3 -m unittest discover -s tests -t .     # 44 offline tests
 ### Dashboard
 
 `python3 -m desk dashboard` serves a read-only page over `runs/desk.db` that refreshes every
-5 seconds: account value and return, the equity curve, open positions with their stops, every
-closed trade with its gain or loss in % and $, how many coins reached each stage, which rules
-killed them, the coins closest to a buy, and the latest events. It works on a phone and in
-dark mode, has no external assets, and binds to localhost unless you pass `--host`. The page
-text is Danish. It shows what the desk did. It cannot place orders or move money.
+5 seconds. It shows the paper book in percent and has four tabs:
 
-The desk restarts where it stopped. Cash, open positions with their stops, cooldowns and the
-smart-wallet book are all in `runs/desk.db`. Every threshold is in `desk/config.py`, and
-`config.example.toml` shows how to override them.
+- **Overblik**: return since start, today and the last 24 hours / 7 days / 30 days, win rate,
+  average result per trade, the largest drawdown, the return curve, open positions and a
+  day-by-day table.
+- **Handler**: key figures for the closed trades, and every trade with its result, stake, hold
+  time and exit. A row expands to show entry and exit prices, the price impact paid on each side
+  and the six score components behind the buy.
+- **Marked**: the coins inside the Scout's window right now with their market data and the
+  desk's latest verdict on each, how many coins reached each stage, which rules killed them and
+  the coins closest to a buy.
+- **Desk**: the desk's health, the rules it is running with (read from the configuration) and
+  the event log.
 
-Useful queries:
-
-```bash
-sqlite3 runs/desk.db "select datetime(ts,'unixepoch'), stage, symbol, reasons from kills order by ts desc limit 20"
-sqlite3 runs/desk.db "select symbol, round(score,1), components from scores order by score desc limit 10"
-sqlite3 runs/desk.db "select symbol, cost_usd, pnl_usd, exit_reason from positions"
-```
+It works on a phone, has light and dark themes, uses no external assets, and binds to localhost
+unless you pass `--host`. The page text is Danish. It shows what the desk did. It cannot place
+orders or move money.
 
 ### Running it around the clock
 

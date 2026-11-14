@@ -90,9 +90,11 @@ def equity_points(rows: list, start_ts: float | None, start_equity: float, max_p
     return [[round(t, 1), round(e, 2)] for t, e in pts]
 
 
-def snapshot(db_path: str | Path, min_score: float = 70.0, now: float | None = None) -> dict:
+def snapshot(db_path: str | Path, min_score: float = 70.0, now: float | None = None,
+             rules: dict | None = None) -> dict:
+    """`rules` is the desk's configuration (thresholds), shown on the page as the active rules."""
     now = now or time.time()
-    base = {"generated_ts": now, "mode": "paper", "min_score": min_score}
+    base = {"generated_ts": now, "mode": "paper", "min_score": min_score, "rules": rules}
     if not Path(db_path).exists():
         return {**base, "empty": True}
     conn = sqlite3.connect(f"file:{Path(db_path).resolve()}?mode=ro", uri=True, timeout=10)
@@ -128,12 +130,32 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
         return p["cost_usd"] / equity_then * 100 if equity_then else 0.0
 
     stake_by_id = {p["id"]: stake_pct(p) for p in positions}
+
+    # What each fill cost in price impact, and the scorecard that triggered each buy.
+    impact: dict[tuple[str, str], float] = {}
+    for r in q("SELECT kind, json_extract(payload, '$.position_id') AS pid, "
+               "json_extract(payload, '$.impact_pct') AS imp FROM events WHERE kind IN ('fill_buy', 'fill_sell')"):
+        impact[(r["pid"], r["kind"])] = r["imp"]
+
+    def entry_card(p: dict) -> dict | None:
+        rows = q("SELECT components FROM scores WHERE mint=? AND ts<=? ORDER BY ts DESC LIMIT 1",
+                 (p["mint"], (p["opened_ts"] or 0.0) + 1))
+        return json.loads(rows[0]["components"]) if rows else None
+
+    def common(p: dict) -> dict:
+        return {"id": p["id"], "pair_address": p["pair_address"], "components": entry_card(p),
+                "buy_impact_pct": impact.get((p["id"], "fill_buy")),
+                "sell_impact_pct": impact.get((p["id"], "fill_sell"))}
+
     open_pos, closed = [], []
     for p in positions:
         entry = p["entry_price"] or 0.0
         if p["status"] == "open":
             value = p["qty"] * p["last_price"]
             open_pos.append({
+                **common(p),
+                "high_price": p["high_price"],
+                "stop_distance_pct": (p["stop_price"] / p["last_price"] - 1) * 100 if p["last_price"] else 0.0,
                 "symbol": p["symbol"], "mint": p["mint"], "score": p["score"], "opened_ts": p["opened_ts"],
                 "cost_usd": p["cost_usd"], "entry_price": entry, "last_price": p["last_price"],
                 "last_price_ts": p["last_price_ts"], "stop_price": p["stop_price"],
@@ -145,6 +167,7 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
             })
         else:
             closed.append({
+                **common(p),
                 "symbol": p["symbol"], "mint": p["mint"], "score": p["score"],
                 "opened_ts": p["opened_ts"], "closed_ts": p["closed_ts"],
                 "duration_s": (p["closed_ts"] or 0) - (p["opened_ts"] or 0),
@@ -234,6 +257,47 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
         sp = json.loads(scan[0]["payload"] or "{}")
         last_scan = {"ts": scan[0]["ts"], "mints_seen": sp.get("mints_seen"), "in_window": sp.get("in_window")}
 
+    # ---- the coins inside the Scout's window right now, with the desk's latest verdict ----
+    window: list[dict] = []
+    window_ts = None
+    if q("SELECT 1 FROM sqlite_master WHERE type='table' AND name='scan_window'"):
+        rows = [dict(r) for r in q("SELECT * FROM scan_window ORDER BY vol_h1 DESC")]
+        mints = tuple(r["mint"] for r in rows)
+        marks_w = ",".join("?" * len(mints))
+        verdicts = {r["mint"]: r for r in q(
+            "SELECT k.mint, k.ts, k.stage, k.reasons, k.recheck_at FROM kills k JOIN "
+            f"(SELECT MAX(id) AS id FROM kills WHERE mint IN ({marks_w}) GROUP BY mint) m ON k.id = m.id",
+            mints)} if mints else {}
+        scored = {r["mint"]: r["score"] for r in q(
+            "SELECT s.mint, s.score FROM scores s JOIN "
+            f"(SELECT MAX(id) AS id FROM scores WHERE mint IN ({marks_w}) GROUP BY mint) m ON s.id = m.id",
+            mints)} if mints else {}
+        held = {p["mint"] for p in open_pos}
+        for r in rows:
+            window_ts = max(window_ts or 0.0, r["ts"] or 0.0)
+            verdict = verdicts.get(r["mint"])
+            if r["mint"] in held:
+                status = {"kind": "held"}
+            elif verdict:
+                status = {"kind": "killed", "stage": verdict["stage"], "ts": verdict["ts"],
+                          "recheck_at": verdict["recheck_at"],
+                          "reasons": [_reason(verdict["stage"], t) for t in json.loads(verdict["reasons"])]}
+            else:
+                status = {"kind": "new"}
+            window.append({**{k: r[k] for k in ("mint", "symbol", "pair_address", "dex_id", "age_h", "mcap",
+                                                 "liq", "vol_h1", "pc_h1", "pc_m5", "price")},
+                           "last_score": scored.get(r["mint"]), "status": status})
+
+    started = q("SELECT ts FROM events WHERE kind='start' ORDER BY id DESC LIMIT 1")
+    cycle = q("SELECT json_extract(payload, '$.seconds') AS s FROM events WHERE kind='cycle' ORDER BY id DESC LIMIT 1")
+    health = {
+        "last_start_ts": started[0]["ts"] if started else None,
+        "last_cycle_seconds": cycle[0]["s"] if cycle else None,
+        "errors_24h": q("SELECT COUNT(*) AS n FROM events WHERE kind='error' AND ts > ?", (now - 86400,))[0]["n"],
+        "candidates_24h": q("SELECT COUNT(DISTINCT mint) AS n FROM events WHERE kind='candidate' AND ts > ?",
+                            (now - 86400,))[0]["n"],
+    }
+
     return {
         "status": {
             "running": bool(span["b"]) and now - span["b"] < RUNNING_WITHIN_S,
@@ -251,6 +315,9 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
             "smart_wallets": q("SELECT COUNT(*) AS n FROM smart_wallets")[0]["n"],
         },
         "equity_curve": curve,
+        "window": window,
+        "window_ts": window_ts,
+        "health": health,
         "open_positions": open_pos,
         "closed_trades": closed,
         "funnel": funnel,
@@ -297,10 +364,11 @@ class DashboardServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, db_path: str | Path, host: str = "127.0.0.1", port: int = 8787,
-                 min_score: float = 70.0, cache_seconds: float = 2.0):
+                 min_score: float = 70.0, cache_seconds: float = 2.0, rules: dict | None = None):
         super().__init__((host, port), _Handler)
         self.db_path = Path(db_path)
         self.min_score = min_score
+        self.rules = rules
         self.cache_seconds = cache_seconds
         self._cache: tuple[float, dict] | None = None
         self._lock = threading.Lock()
@@ -309,7 +377,7 @@ class DashboardServer(ThreadingHTTPServer):
         with self._lock:
             if self._cache and time.time() - self._cache[0] < self.cache_seconds:
                 return self._cache[1]
-            snap = snapshot(self.db_path, self.min_score)
+            snap = snapshot(self.db_path, self.min_score, rules=self.rules)
             self._cache = (time.time(), snap)
             return snap
 

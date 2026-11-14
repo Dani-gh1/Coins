@@ -105,6 +105,7 @@ class Desk:
         self.cycle += 1
         t0 = time.time()
         rep = self.scout.scan()
+        self.log.window(rep.candidates)
         now = time.time()
         fresh, held, suppressed = [], 0, 0
         for c in rep.candidates:

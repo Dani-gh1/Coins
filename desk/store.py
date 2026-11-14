@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS wallet_token (
     PRIMARY KEY (wallet, mint)
 );
 CREATE TABLE IF NOT EXISTS trade_marks (mint TEXT PRIMARY KEY, ts REAL, ids TEXT);
+CREATE TABLE IF NOT EXISTS scan_window (
+    mint TEXT PRIMARY KEY, symbol TEXT, name TEXT, pair_address TEXT, dex_id TEXT,
+    age_h REAL, mcap REAL, liq REAL, vol_h1 REAL, pc_h1 REAL, pc_m5 REAL, price REAL, ts REAL
+);
 CREATE TABLE IF NOT EXISTS smart_wallets (
     wallet TEXT PRIMARY KEY, source TEXT, wins INTEGER, losses INTEGER,
     realized_usd REAL, added_ts REAL, updated_ts REAL
@@ -71,6 +75,14 @@ class Store:
     def executemany(self, sql: str, rows: list) -> None:
         with self.lock:
             self.conn.executemany(sql, rows)
+            self.conn.commit()
+
+    def replace_all(self, table: str, columns: list[str], rows: list) -> None:
+        """Swap a table's whole contents in one transaction (readers never see it half-written)."""
+        with self.lock:
+            self.conn.execute(f"DELETE FROM {table}")
+            self.conn.executemany(
+                f"INSERT INTO {table}({','.join(columns)}) VALUES({','.join('?' * len(columns))})", rows)
             self.conn.commit()
 
     def query(self, sql: str, params: tuple | list = ()) -> list[sqlite3.Row]:

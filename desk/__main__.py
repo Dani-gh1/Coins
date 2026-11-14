@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 from .config import load_config
@@ -42,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "dashboard":
         from .dashboard import DashboardServer
-        server = DashboardServer(db_path, args.host, args.port, cfg.analyst.min_score)
+        server = DashboardServer(db_path, args.host, args.port, cfg.analyst.min_score, rules=asdict(cfg))
         print(f"dashboard: http://{args.host}:{server.server_address[1]}/  (Ctrl+C to stop)", flush=True)
         try:
             server.serve_forever()
@@ -72,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         if args.dashboard is not None:
             from .dashboard import DashboardServer
-            server = DashboardServer(db_path, args.host, args.dashboard, cfg.analyst.min_score)
+            server = DashboardServer(db_path, args.host, args.dashboard, cfg.analyst.min_score, rules=asdict(cfg))
             server.start_in_thread()
             print(f"dashboard: http://{args.host}:{server.server_address[1]}/", flush=True)
         desk.run(hours=args.hours)
