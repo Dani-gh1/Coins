@@ -1,4 +1,4 @@
-# Copy to my.toml, edit, and run:  python -m desk run --config my.toml
+# Copy to my.toml, edit, and run:  python3 -m desk run --config my.toml
 # Only the keys you set are changed; everything else keeps the defaults in desk/config.py.
 
 scan_interval_seconds = 60

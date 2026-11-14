@@ -1,6 +1,6 @@
 {
  "version": 1,
- "saved_ts": 1794673237.7331378,
+ "saved_ts": 1794682964.0523386,
  "account": {
   "starting_equity": 10000.0,
   "cash": 10055.707712000001
@@ -70,6 +70,15 @@
    "realized_usd": 466.7485789537691,
    "added_ts": 1794673237.6958704,
    "updated_ts": 1794673237.6958704
+  },
+  {
+   "wallet": "63h1KZSKzVmS24mcB4A3G2fszzf2nM3P2XVEQBqU8hsc",
+   "source": "learned",
+   "wins": 2,
+   "losses": 0,
+   "realized_usd": 120.04278927911983,
+   "added_ts": 1794682933.535402,
+   "updated_ts": 1794682933.535402
   }
  ],
  "equity_curve": [
@@ -170,7 +179,7 @@
    10055.71
   ],
   [
-   1794673181.7,
+   1794682851.0,
    10055.71
   ]
  ]

@@ -510,7 +510,7 @@ function render(state) {
   const main = $("main");
   if (state.empty || !state.status.last_event_ts) {
     main.replaceChildren(card("Ingen data endnu", null,
-      h("div", { class: "empty", text: "Start desken med kommandoen  python -m desk run  – så dukker konto, handler og afvisninger op her." })));
+      h("div", { class: "empty", text: "Start desken med kommandoen  python3 -m desk run  – så dukker konto, handler og afvisninger op her." })));
     $("foot").textContent = "";
     return;
   }

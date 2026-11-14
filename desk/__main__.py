@@ -1,10 +1,10 @@
 """CLI.
 
-  python -m desk run [--hours 10] [--run-id NAME] [--config my.toml]   start the desk (paper)
-  python -m desk once [--run-id NAME]                                   one scan cycle, then exit
-  python -m desk report [--run-id NAME]                                 print / write the report
-  python -m desk dashboard [--port 8787]                                web dashboard (read-only)
-  python -m desk run --dashboard 8787                                   desk + dashboard together
+  python3 -m desk run [--hours 10] [--run-id NAME] [--config my.toml]   start the desk (paper)
+  python3 -m desk once [--run-id NAME]                                   one scan cycle, then exit
+  python3 -m desk report [--run-id NAME]                                 print / write the report
+  python3 -m desk dashboard [--port 8787]                                web dashboard (read-only)
+  python3 -m desk run --dashboard 8787                                   desk + dashboard together
 """
 from __future__ import annotations
 

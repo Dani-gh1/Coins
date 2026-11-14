@@ -1,7 +1,7 @@
 """Read-only web dashboard over the desk's SQLite journal.
 
-  python -m desk dashboard [--port 8787] [--host 127.0.0.1]
-  python -m desk run --dashboard 8787          # desk + dashboard in one process
+  python3 -m desk dashboard [--port 8787] [--host 127.0.0.1]
+  python3 -m desk run --dashboard 8787          # desk + dashboard in one process
 
 GET /            the page (desk/dashboard.html, no external assets)
 GET /api/state   one JSON snapshot: account, positions, trades, equity curve, funnel, kills

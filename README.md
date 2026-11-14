@@ -65,21 +65,22 @@ seed wallets you trust in `data/smart_wallets.txt`.
 
 ## Run it
 
-Python ≥ 3.11, standard library only. No API keys needed.
+Python ≥ 3.11, standard library only. No API keys needed. On macOS and most Linux systems the
+command is `python3` (there is no `python`); check the version with `python3 --version`.
 
 ```bash
-python -m desk run --hours 10                 # paper desk overnight
-python -m desk run --hours 10 --run-id night1 --config my.toml
-python -m desk once                           # a single scan cycle
-python -m desk report --run-id night1         # P&L, trades, kill table, top scores
-python -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
-python -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
-python -m unittest discover -s tests -t .     # 44 offline tests
+python3 -m desk run --hours 10                 # paper desk overnight
+python3 -m desk run --hours 10 --run-id night1 --config my.toml
+python3 -m desk once                           # a single scan cycle
+python3 -m desk report --run-id night1         # P&L, trades, kill table, top scores
+python3 -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
+python3 -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
+python3 -m unittest discover -s tests -t .     # 44 offline tests
 ```
 
 ### Dashboard
 
-`python -m desk dashboard` serves a read-only page over `runs/desk.db` that refreshes every
+`python3 -m desk dashboard` serves a read-only page over `runs/desk.db` that refreshes every
 5 seconds: account value and return, the equity curve, open positions with their stops, every
 closed trade with its gain or loss in % and $, how many coins reached each stage, which rules
 killed them, the coins closest to a buy, and the latest events. It works on a phone and in
@@ -100,7 +101,7 @@ sqlite3 runs/desk.db "select symbol, cost_usd, pnl_usd, exit_reason from positio
 
 ### Running it around the clock
 
-`python -m desk run --dashboard 8787` with no `--hours` runs until you stop it, so 24/7 is a
+`python3 -m desk run --dashboard 8787` with no `--hours` runs until you stop it, so 24/7 is a
 matter of keeping that one command alive on a machine that stays on. With systemd:
 
 ```ini
