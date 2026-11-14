@@ -104,14 +104,14 @@ th:last-child, td:last-child { padding-right: 0; }
   .meter-row { grid-template-columns: minmax(0, 1fr) auto; }
   .meter-row .track { grid-column: 1 / -1; grid-row: 2; }
   .mint { display: none; }
-  table.stack thead { display: none; }
-  table.stack tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 0; border-bottom: 1px solid var(--grid); }
-  table.stack tr:last-child { border-bottom: 0; }
-  table.stack td { border: 0; padding: 0; white-space: normal; min-width: 0; }
-  table.stack td.t-when { grid-column: 2; grid-row: 1; color: var(--muted); font-size: 12px; }
-  table.stack td.t-coin { grid-column: 1; grid-row: 1; }
-  table.stack td.t-stage { display: none; }
-  table.stack td.t-why { grid-column: 1 / -1; color: var(--ink-2); }
+  table.rows thead { display: none; }
+  table.rows tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 0; border-bottom: 1px solid var(--grid); }
+  table.rows tr:last-child { border-bottom: 0; }
+  table.rows td { border: 0; padding: 0; white-space: normal; min-width: 0; }
+  table.rows td.t-when { grid-column: 2; grid-row: 1; color: var(--muted); font-size: 12px; }
+  table.rows td.t-coin { grid-column: 1; grid-row: 1; }
+  table.rows td.t-stage { display: none; }
+  table.rows td.t-why { grid-column: 1 / -1; color: var(--ink-2); }
 }
 
 .feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
@@ -481,7 +481,7 @@ function activityCard(state) {
 function recentKillsCard(state) {
   if (!state.recent_kills.length) return null;
   return card("Seneste afvisninger", "De nyeste beslutninger om at springe en mønt over",
-    h("div", { class: "scroll" }, h("table", { class: "stack" },
+    h("div", { class: "scroll" }, h("table", { class: "rows" },
       h("thead", null, h("tr", null, ["Tid", "Mønt", "Trin", "Årsag"].map((t) => h("th", { text: t })))),
       h("tbody", null, state.recent_kills.map((k) => h("tr", null,
         h("td", { class: "t-when", text: when(k.ts) }), coinCell(k, "t-coin"),
