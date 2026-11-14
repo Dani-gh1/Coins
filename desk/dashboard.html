@@ -57,7 +57,7 @@ h1 { font-size: 18px; margin: 0; font-weight: 650; }
 .delta .glyph { font-size: 0.72em; color: var(--muted); }
 .delta.up .glyph { color: var(--good); }
 .delta.down .glyph { color: var(--critical); }
-.hero .delta { font-size: 15px; font-weight: 600; }
+.hero .value .glyph { font-size: 0.5em; position: relative; top: -0.12em; }
 
 button.ghost { font: inherit; font-size: 12.5px; color: var(--ink-2); background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
 button.ghost:hover { background: var(--wash); }
@@ -169,8 +169,6 @@ function s(tag, attrs, text) {
 // ---- formatting (Danish) ------------------------------------------------------
 const nf = (d) => new Intl.NumberFormat("da-DK", { minimumFractionDigits: d, maximumFractionDigits: d });
 const sign = (x) => (x > 0 ? "+" : x < 0 ? "−" : "");
-const usd = (x, d = 2) => (x < 0 ? "−" : "") + "$" + nf(d).format(Math.abs(x));
-const usdSigned = (x) => sign(x) + "$" + nf(2).format(Math.abs(x));
 const pct = (x, d = 1) => sign(x) + nf(d).format(Math.abs(x)) + " %";
 const num = (x, d = 0) => nf(d).format(x);
 const pad = (n) => String(n).padStart(2, "0");
@@ -254,20 +252,20 @@ function card(title, sub, body, action) {
 
 function kpis(a) {
   const hero = h("div", { class: "card hero" },
-    h("div", { class: "label", text: "Kontoværdi" }),
-    h("div", { class: "value", text: usd(a.equity) }),
-    delta(a.pnl_usd, pct(a.return_pct, 2) + " · " + usdSigned(a.pnl_usd) + " siden start"),
+    h("div", { class: "label", text: "Afkast siden start" }),
+    h("div", { class: "value" }, delta(a.return_pct, pct(a.return_pct, 2))),
     h("div", { class: "note", style: "margin-top:8px",
-      text: "Start " + usd(a.starting_equity) + " · Kontant " + usd(a.cash) + " · I positioner " + usd(a.open_value) }));
+      text: "Realiseret " + pct(a.realized_pct, 2) + " · Urealiseret " + pct(a.unrealized_pct, 2) +
+        " · " + num(a.invested_pct, 1) + " % af kontoen er i positioner" }));
   const tile = (label, value, note) => h("div", { class: "card tile" },
     h("div", { class: "label", text: label }), h("div", { class: "value" }, value), h("div", { class: "note" }, note));
   const trades = a.closed_trades;
   return h("div", { class: "kpis" }, hero,
-    tile("Realiseret gevinst/tab", delta(a.realized_usd, usdSigned(a.realized_usd)),
-      trades ? "på " + trades + (trades === 1 ? " lukket handel" : " lukkede handler") : "ingen lukkede handler endnu"),
+    tile("Realiseret", delta(a.realized_pct, pct(a.realized_pct, 2)),
+      trades ? "på " + trades + (trades === 1 ? " lukket handel" : " lukkede handler") + ", i % af startbeløbet" : "ingen lukkede handler endnu"),
     tile("Lukkede handler", num(trades),
       trades ? a.wins + " vundet · " + a.losses + " tabt · " + num(a.win_rate) + " % vundne" : "–"),
-    tile("Urealiseret", delta(a.unrealized_usd, usdSigned(a.unrealized_usd)), "på åbne positioner lige nu"));
+    tile("Urealiseret", delta(a.unrealized_pct, pct(a.unrealized_pct, 2)), "på åbne positioner lige nu"));
 }
 
 function niceTicks(lo, hi, n) {
@@ -286,22 +284,25 @@ function timeTicks(t0, t1, target) {
 }
 
 let chartIndex = null;                       // survives re-renders so a keyboard user keeps their place
-function equityChart(box, pts, start) {
+function pctTick(v, step) { return pct(v, step >= 1 ? 0 : step >= 0.1 ? 1 : 2); }
+
+// pts: [timestamp, return since start in %]
+function equityChart(box, pts) {
+  const start = 0;                           // the reference line: 0 % = the starting balance
   box.replaceChildren();
   const W = Math.max(280, box.clientWidth), H = 250, m = { t: 22, r: 86, b: 30, l: 58 };
   const svg = s("svg", { viewBox: "0 0 " + W + " " + H, tabindex: "0", role: "img" });
   let lo = Math.min(start, ...pts.map((p) => p[1])), hi = Math.max(start, ...pts.map((p) => p[1]));
-  if (hi - lo < start * 0.002) { lo -= start * 0.001; hi += start * 0.001; }
+  if (hi - lo < 0.2) { lo -= 0.1; hi += 0.1; }
   const yt = niceTicks(lo, hi, 4);
   lo = yt.ticks[0]; hi = yt.ticks[yt.ticks.length - 1];
   const t0 = pts[0][0], t1 = Math.max(pts[pts.length - 1][0], t0 + 60);
   const x = (t) => m.l + (t - t0) / (t1 - t0) * (W - m.l - m.r);
   const y = (v) => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
-  const dec = yt.step < 1 ? 2 : 0;
 
   for (const v of yt.ticks) {
     svg.append(s("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1 }));
-    svg.append(s("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end" }, usd(v, dec)));
+    svg.append(s("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end" }, pctTick(v, yt.step)));
   }
   const xt = timeTicks(t0, t1, W < 520 ? 3 : 6);
   for (const t of xt.ticks) {
@@ -314,7 +315,7 @@ function equityChart(box, pts, start) {
     fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
   const end = pts[pts.length - 1];
   svg.append(s("circle", { cx: x(end[0]), cy: y(end[1]), r: 5, fill: "var(--series-1)", stroke: "var(--surface)", "stroke-width": 2 }));
-  svg.append(s("text", { class: "end", x: x(end[0]) + 10, y: y(end[1]) + 4 }, usd(end[1])));
+  svg.append(s("text", { class: "end", x: x(end[0]) + 10, y: y(end[1]) + 4 }, pct(end[1], 2)));
 
   const hair = s("line", { y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" });
   const focus = s("circle", { r: 5, fill: "var(--series-1)", stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" });
@@ -325,8 +326,7 @@ function equityChart(box, pts, start) {
     const p = pts[i], r = svg.getBoundingClientRect(), k = r.width / W;
     hair.setAttribute("x1", x(p[0])); hair.setAttribute("x2", x(p[0])); hair.setAttribute("visibility", "visible");
     focus.setAttribute("cx", x(p[0])); focus.setAttribute("cy", y(p[1])); focus.setAttribute("visibility", "visible");
-    showTip(r.left + x(p[0]) * k, r.top + y(p[1]) * k, usd(p[1]),
-      [when(p[0]), pct((p[1] / start - 1) * 100, 2) + " siden start"]);
+    showTip(r.left + x(p[0]) * k, r.top + y(p[1]) * k, pct(p[1], 2), [when(p[0]), "afkast siden start"]);
   }
   function hide() { hair.setAttribute("visibility", "hidden"); focus.setAttribute("visibility", "hidden"); hideTip(); }
   svg.addEventListener("pointermove", (e) => {
@@ -345,29 +345,29 @@ function equityChart(box, pts, start) {
     e.preventDefault();
     show(Math.max(0, Math.min(pts.length - 1, (chartIndex ?? pts.length - 1) + stepBy)));
   });
-  svg.setAttribute("aria-label", "Kontoværdi fra " + when(t0) + " til " + when(end[0]) + ": " +
-    usd(pts[0][1]) + " til " + usd(end[1]) + ". Brug piletasterne for at læse punkterne.");
+  svg.setAttribute("aria-label", "Afkast siden start fra " + when(t0) + " til " + when(end[0]) + ": nu " +
+    pct(end[1], 2) + ". Brug piletasterne for at læse punkterne.");
   box.append(svg);
 }
 
 let showEquityTable = false;
 function equityCard(state) {
-  const pts = state.equity_curve, start = state.account.starting_equity;
+  const base = state.account.starting_equity || 1;
+  const pts = state.equity_curve.map(([t, eq]) => [t, (eq / base - 1) * 100]);
   const box = h("div", { class: "chart" });
   const changes = pts.filter((p, i) => i === 0 || i === pts.length - 1 || p[1] !== pts[i - 1][1]);
   const table = h("div", { class: "scroll", hidden: !showEquityTable },
     h("table", null,
-      h("thead", null, h("tr", null, h("th", { text: "Tidspunkt" }), h("th", { class: "num", text: "Kontoværdi" }), h("th", { class: "num", text: "Siden start" }))),
+      h("thead", null, h("tr", null, h("th", { text: "Tidspunkt" }), h("th", { class: "num", text: "Afkast siden start" }))),
       h("tbody", null, changes.map((p) => h("tr", null,
-        h("td", { text: when(p[0]) }), h("td", { class: "num", text: usd(p[1]) }),
-        h("td", { class: "num", text: pct((p[1] / start - 1) * 100, 2) }))))));
+        h("td", { text: when(p[0]) }), h("td", { class: "num", text: pct(p[1], 2) }))))));
   const btn = h("button", { class: "ghost", type: "button", "aria-pressed": String(showEquityTable), text: "Vis som tabel",
     onclick: () => { showEquityTable = !showEquityTable; btn.setAttribute("aria-pressed", String(showEquityTable)); table.hidden = !showEquityTable; } });
-  const sec = card("Kontoværdi over tid",
-    "Kontant plus værdien af åbne positioner. Den grå linje er startbeløbet på " + usd(start, 0) + ".",
+  const sec = card("Afkast over tid",
+    "Ændring i kontoens værdi siden start, i procent. Den grå linje er 0 %.",
     h("div", null, box, table), btn);
   sec.dataset.chart = "1";
-  sec._draw = () => pts.length > 1 && equityChart(box, pts, start);
+  sec._draw = () => pts.length > 1 && equityChart(box, pts);
   return sec;
 }
 
@@ -375,15 +375,15 @@ function coinCell(t, cls) { return h("td", { class: cls }, h("span", { class: "c
 
 function openCard(rows) {
   if (!rows.length) return card("Åbne positioner", null, h("div", { class: "empty", text: "Ingen åbne positioner lige nu." }));
-  const head = ["Mønt", "Lige nu", "Urealiseret", "Indsats", "Købt", "Stop", "Trailing stop", "Score"];
-  return card("Åbne positioner", "Kurs og stop opdateres hvert 10. sekund, mens desken kører",
+  const head = ["Mønt", "Lige nu", "Bidrag til kontoen", "Indsats", "Købt", "Stop", "Trailing stop", "Score"];
+  return card("Åbne positioner", "Kurs og stop opdateres hvert 10. sekund, mens desken kører. Indsats er andelen af kontoen ved købet.",
     h("div", { class: "scroll" }, h("table", null,
       h("thead", null, h("tr", null, head.map((t, i) => h("th", { class: [1, 2, 3, 5, 7].includes(i) ? "num" : null, text: t })))),
       h("tbody", null, rows.map((p) => h("tr", null,
         coinCell(p),
         h("td", { class: "num strong" }, delta(p.unrealized_pct, pct(p.unrealized_pct))),
-        h("td", { class: "num", text: usdSigned(p.unrealized_usd) }),
-        h("td", { class: "num", text: usd(p.cost_usd) }),
+        h("td", { class: "num", text: pct(p.account_pct, 2) }),
+        h("td", { class: "num", text: num(p.stake_pct, 1) + " %" }),
         h("td", { text: when(p.opened_ts) }),
         h("td", { class: "num", text: pct(p.stop_pct) + " fra køb" }),
         h("td", { text: p.trail_active ? "Aktiv" : "Ikke aktiveret endnu" }),
@@ -392,15 +392,15 @@ function openCard(rows) {
 
 function closedCard(rows) {
   if (!rows.length) return card("Lukkede handler", null, h("div", { class: "empty", text: "Ingen handler endnu. Desken køber først, når en mønt består alle filtre og scorer over grænsen." }));
-  const head = ["Mønt", "Resultat", "Gevinst/tab", "Indsats", "Købt", "Varighed", "Top undervejs", "Solgt via", "Score"];
-  return card("Lukkede handler", "Nyeste først. Resultat er efter prisvirkning og gebyrer ved både køb og salg.",
+  const head = ["Mønt", "Resultat", "Bidrag til kontoen", "Indsats", "Købt", "Varighed", "Top undervejs", "Solgt via", "Score"];
+  return card("Lukkede handler", "Nyeste først. Resultat er handlens gevinst eller tab efter prisvirkning og gebyrer. Bidrag er det samme målt i procent af startbeløbet, og indsats er andelen af kontoen ved købet.",
     h("div", { class: "scroll" }, h("table", null,
       h("thead", null, h("tr", null, head.map((t, i) => h("th", { class: [1, 2, 3, 6, 8].includes(i) ? "num" : null, text: t })))),
       h("tbody", null, rows.map((t) => h("tr", null,
         coinCell(t),
-        h("td", { class: "num strong" }, delta(t.pnl_usd, pct(t.pnl_pct))),
-        h("td", { class: "num", text: usdSigned(t.pnl_usd) }),
-        h("td", { class: "num", text: usd(t.cost_usd) }),
+        h("td", { class: "num strong" }, delta(t.pnl_pct, pct(t.pnl_pct))),
+        h("td", { class: "num", text: pct(t.account_pct, 2) }),
+        h("td", { class: "num", text: num(t.stake_pct, 1) + " %" }),
         h("td", { text: when(t.opened_ts) }),
         h("td", { text: duration(t.duration_s) }),
         h("td", { class: "num", text: pct(t.max_gain_pct) }),
@@ -458,12 +458,14 @@ function scoresCard(state) {
 function activityText(a) {
   const sym = a.symbol || "";
   switch (a.kind) {
-    case "fill_buy": return ["Købte ", h("span", { class: "strong", text: sym }), " for " + usd(a.usd || 0) + (a.score ? " (score " + num(a.score, 1) + ")" : "")];
-    case "fill_sell": return ["Solgte ", h("span", { class: "strong", text: sym }), " via " + (EXITS[a.reason] || "salg").toLowerCase() + ": ", delta(a.pnl_usd, usdSigned(a.pnl_usd) + " (" + pct(a.pnl_pct) + ")")];
+    case "fill_buy": return ["Købte ", h("span", { class: "strong", text: sym }),
+      (a.stake_pct != null ? " med " + num(a.stake_pct, 1) + " % af kontoen" : "") + (a.score ? " (score " + num(a.score, 1) + ")" : "")];
+    case "fill_sell": return ["Solgte ", h("span", { class: "strong", text: sym }), " via " + (EXITS[a.reason] || "salg").toLowerCase() + ": ",
+      delta(a.pnl_pct, pct(a.pnl_pct) + " (" + pct(a.account_pct, 2) + " på kontoen)")];
     case "exit_signal": return [(EXITS[a.reason] || "Stop") + " ramt på ", h("span", { class: "strong", text: sym })];
     case "trail_armed": return ["Trailing stop aktiveret på ", h("span", { class: "strong", text: sym })];
-    case "start": return ["Desken startede" + (a.equity != null ? " med " + usd(a.equity) : "")];
-    case "stop": return ["Desken stoppede" + (a.equity != null ? " med " + usd(a.equity) : "")];
+    case "start": return ["Desken startede" + (a.return_pct != null ? " (afkast " + pct(a.return_pct, 2) + ")" : "")];
+    case "stop": return ["Desken stoppede" + (a.return_pct != null ? " (afkast " + pct(a.return_pct, 2) + ")" : "")];
     case "smart_wallets_learned": return ["Smart wallet-listen voksede til " + num(a.book_size || 0)];
     case "error": return ["Fejl: " + (a.error || "ukendt")];
     default: return [a.kind];

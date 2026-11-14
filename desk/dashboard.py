@@ -114,9 +114,22 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
     start_equity = account("starting_equity", 0.0)
     cash = account("cash", start_equity)
 
+    # The page shows the paper book in percent, not dollars:
+    #   stake_pct    a position's cost as a share of the account when it was opened
+    #   account_pct  its gain or loss as a share of the starting balance (these add up to the return)
+    positions = [dict(r) for r in q("SELECT * FROM positions ORDER BY opened_ts")]
+    booked = sorted(((p["closed_ts"] or 0.0, p["pnl_usd"] or 0.0) for p in positions if p["status"] == "closed"))
+
+    def of_start(usd: float) -> float:
+        return usd / start_equity * 100 if start_equity else 0.0
+
+    def stake_pct(p: dict) -> float:
+        equity_then = start_equity + sum(pnl for ts, pnl in booked if ts <= (p["opened_ts"] or 0.0))
+        return p["cost_usd"] / equity_then * 100 if equity_then else 0.0
+
+    stake_by_id = {p["id"]: stake_pct(p) for p in positions}
     open_pos, closed = [], []
-    for r in q("SELECT * FROM positions ORDER BY opened_ts"):
-        p = dict(r)
+    for p in positions:
         entry = p["entry_price"] or 0.0
         if p["status"] == "open":
             value = p["qty"] * p["last_price"]
@@ -126,6 +139,7 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
                 "last_price_ts": p["last_price_ts"], "stop_price": p["stop_price"],
                 "stop_pct": (p["stop_price"] / entry - 1) * 100 if entry else 0.0,
                 "trail_active": bool(p["trail_active"]), "value_usd": value,
+                "stake_pct": stake_by_id[p["id"]], "account_pct": of_start(value - p["cost_usd"]),
                 "unrealized_usd": value - p["cost_usd"],
                 "unrealized_pct": (value / p["cost_usd"] - 1) * 100 if p["cost_usd"] else 0.0,
             })
@@ -136,6 +150,7 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
                 "duration_s": (p["closed_ts"] or 0) - (p["opened_ts"] or 0),
                 "cost_usd": p["cost_usd"], "proceeds_usd": p["proceeds_usd"], "pnl_usd": p["pnl_usd"],
                 "pnl_pct": (p["pnl_usd"] / p["cost_usd"] * 100) if p["cost_usd"] else 0.0,
+                "stake_pct": stake_by_id[p["id"]], "account_pct": of_start(p["pnl_usd"] or 0.0),
                 "entry_price": entry, "exit_price": p["exit_price"],
                 "max_gain_pct": (p["high_price"] / entry - 1) * 100 if entry else 0.0,
                 "exit_reason": p["exit_reason"],
@@ -194,16 +209,18 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
         pos = p.get("position") or {}
         item = {"ts": r["ts"], "kind": r["kind"], "symbol": r["symbol"]}
         if r["kind"] == "fill_buy":
-            item.update(usd=p.get("usd"), score=pos.get("score"), impact_pct=p.get("impact_pct"))
+            item.update(usd=p.get("usd"), score=pos.get("score"), impact_pct=p.get("impact_pct"),
+                        stake_pct=stake_by_id.get(pos.get("id")))
         elif r["kind"] == "fill_sell":
             cost = pos.get("cost_usd") or 0.0
             pnl = pos.get("pnl_usd") or 0.0
             item.update(pnl_usd=pnl, pnl_pct=(pnl / cost * 100) if cost else 0.0,
-                        reason=pos.get("exit_reason"))
+                        account_pct=of_start(pnl), reason=pos.get("exit_reason"))
         elif r["kind"] == "exit_signal":
             item.update(reason=p.get("reason"))
         elif r["kind"] in ("start", "stop"):
-            item.update(equity=p.get("equity"))
+            eq = p.get("equity")
+            item.update(equity=eq, return_pct=of_start(eq - start_equity) if eq is not None else None)
         elif r["kind"] == "error":
             item.update(error=str(p.get("error"))[:200])
         elif r["kind"] == "smart_wallets_learned":
@@ -227,6 +244,8 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
             "starting_equity": start_equity, "cash": cash, "open_value": open_value, "equity": equity,
             "return_pct": (equity / start_equity - 1) * 100 if start_equity else 0.0,
             "pnl_usd": equity - start_equity, "realized_usd": realized, "unrealized_usd": unrealized,
+            "realized_pct": of_start(realized), "unrealized_pct": of_start(unrealized),
+            "invested_pct": (open_value / equity * 100) if equity else 0.0,
             "closed_trades": len(closed), "wins": wins, "losses": len(closed) - wins,
             "win_rate": (wins / len(closed) * 100) if closed else None,
             "smart_wallets": q("SELECT COUNT(*) AS n FROM smart_wallets")[0]["n"],

@@ -38,6 +38,10 @@ class SnapshotTests(unittest.TestCase):
         self.assertAlmostEqual(acct["equity"], acct["cash"] + pos["value_usd"])
         # a fresh position is marked at the mid the quote implies: down by its impact, no more
         self.assertAlmostEqual(pos["unrealized_pct"], -0.5, delta=0.1)
+        # shown in percent: the stake is 8% of the account, and the parts add up to the return
+        self.assertAlmostEqual(pos["stake_pct"], 8.0, delta=0.01)
+        self.assertAlmostEqual(acct["realized_pct"] + acct["unrealized_pct"], acct["return_pct"], places=6)
+        self.assertAlmostEqual(acct["invested_pct"], 8.0, delta=0.1)
         self.assertEqual(snap["funnel"], {"in_window": 3, "passed_filter": 1, "scored_pass": 1, "bought": 1})
         rules = {(k["stage"], k["rule"]): k["coins"] for k in snap["kills"]}
         self.assertEqual(rules[("filter", "low_liquidity")], 1)
@@ -54,6 +58,11 @@ class SnapshotTests(unittest.TestCase):
         self.assertLess(trade["pnl_pct"], -40)
         self.assertAlmostEqual(trade["pnl_pct"], trade["pnl_usd"] / trade["cost_usd"] * 100)
         acct = snap["account"]
+        self.assertAlmostEqual(trade["account_pct"], acct["return_pct"], places=6)   # the only trade
+        self.assertAlmostEqual(trade["stake_pct"], 8.0, delta=0.01)
+        sell = snap["activity"][0]
+        self.assertAlmostEqual(sell["account_pct"], trade["account_pct"], places=6)
+        self.assertAlmostEqual(snap["activity"][2]["stake_pct"], 8.0, delta=0.01)
         self.assertAlmostEqual(acct["equity"], acct["starting_equity"] + trade["pnl_usd"], places=6)
         self.assertEqual((acct["wins"], acct["losses"], acct["win_rate"]), (0, 1, 0.0))
         kinds = [a["kind"] for a in snap["activity"]]
