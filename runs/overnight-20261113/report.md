@@ -1,8 +1,8 @@
 # Memecoin desk report - run overnight-20261113
 
-Generated 2026-11-14 00:59 UTC. **Paper trading only.**
+Generated 2026-11-14 01:31 UTC. **Paper trading only.**
 
-Window: 11-13 19:07 -> 11-14 00:59 UTC (5.9 h, 352 scan cycles)
+Window: 11-13 19:07 -> 11-14 01:30 UTC (6.4 h, 384 scan cycles)
 
 ## Account
 
@@ -18,14 +18,14 @@ Window: 11-13 19:07 -> 11-14 00:59 UTC (5.9 h, 352 scan cycles)
 
 ## Kills
 
-472 kill decisions across 23 distinct coins (filter 261, analyst 208, executor 3). A coin can fail several rules at once.
+510 kill decisions across 25 distinct coins (filter 282, analyst 225, executor 3). A coin can fail several rules at once.
 
 | stage | rule | times hit |
 |---|---|---|
-| filter | low_volume_1h | 233 |
-| analyst | score_below_70 | 208 |
-| filter | low_liquidity | 158 |
-| filter | already_pumped | 25 |
+| filter | low_volume_1h | 251 |
+| analyst | score_below_70 | 225 |
+| filter | low_liquidity | 173 |
+| filter | already_pumped | 28 |
 | filter | bundled | 2 |
 | filter | mint_authority | 1 |
 | filter | lp_unlocked | 1 |
@@ -36,7 +36,7 @@ Window: 11-13 19:07 -> 11-14 00:59 UTC (5.9 h, 352 scan cycles)
 
 ## Analyst scores
 
-212 scorecards, 4 at 70+.
+229 scorecards, 4 at 70+.
 
 | symbol | when | score | momentum | unique buyers | buy/sell | holder growth | liq/mcap | smart wallets |
 |---|---|---|---|---|---|---|---|---|
