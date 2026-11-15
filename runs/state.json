@@ -1,9 +1,9 @@
 {
  "version": 1,
- "saved_ts": 1794731313.0937648,
+ "saved_ts": 1794742759.2059028,
  "account": {
   "starting_equity": 10000.0,
-  "cash": 9966.553238
+  "cash": 9894.982146
  },
  "positions": [
   {
@@ -86,6 +86,33 @@
    "proceeds_usd": 715.3521420000001,
    "pnl_usd": -89.15447399999994,
    "exit_reason": "stop_loss"
+  },
+  {
+   "id": "pos_017eca9310",
+   "mint": "FS1pBmZKp2Qw1atC64GoLamHstECAos9ot8bGPgDpump",
+   "symbol": "Socks",
+   "pair_address": "AgqoLMPxk7ETjY74TnyePqKSQQYTTsCrmMVgyQRkaJK3",
+   "decimals": 6,
+   "qty": 1877281.499661,
+   "qty_raw": 1877281499661,
+   "cost_usd": 797.3742589999999,
+   "entry_price": 0.00042472280217110807,
+   "stop_price": 0.00039923943404084153,
+   "high_price": 0.00042472280217110807,
+   "trail_active": 0,
+   "trail_trigger_price": 0.0004756895384316411,
+   "trail_distance_pct": 6.0,
+   "score": 75.37,
+   "plan_id": "plan_73464d2f1d",
+   "opened_ts": 1794742146.9032216,
+   "last_price": 0.00039816088201837766,
+   "last_price_ts": 1794742168.0331912,
+   "status": "closed",
+   "closed_ts": 1794742169.2337613,
+   "exit_price": 0.0003866512119418823,
+   "proceeds_usd": 725.803167,
+   "pnl_usd": -71.57109199999991,
+   "exit_reason": "stop_loss"
   }
  ],
  "smart_wallets": [
@@ -115,6 +142,24 @@
    "realized_usd": 197.3060737570115,
    "added_ts": 1794731306.960153,
    "updated_ts": 1794731306.960153
+  },
+  {
+   "wallet": "HeTVYyszHsm63YtKeuputiH4RsdNnrVgfDtAjHUuLL4d",
+   "source": "learned",
+   "wins": 2,
+   "losses": 0,
+   "realized_usd": 136.98835997027714,
+   "added_ts": 1794739865.5566275,
+   "updated_ts": 1794739865.5566275
+  },
+  {
+   "wallet": "FHJnj9y8yPeRnYMq3QWcgyyptm1Yz1ct3g4we4i6zux6",
+   "source": "learned",
+   "wins": 2,
+   "losses": 0,
+   "realized_usd": 200.57194391036177,
+   "added_ts": 1794742759.1781988,
+   "updated_ts": 1794742759.1781988
   }
  ],
  "equity_curve": [
@@ -271,8 +316,20 @@
    9966.55
   ],
   [
-   1794731256.7,
+   1794742094.9,
    9966.55
+  ],
+  [
+   1794742151.5,
+   9933.38
+  ],
+  [
+   1794742208.3,
+   9894.98
+  ],
+  [
+   1794742695.1,
+   9894.98
   ]
  ]
 }
