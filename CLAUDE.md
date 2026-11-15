@@ -9,21 +9,21 @@ Scout → Filter → Analyst → Risk → Executor, og Logger skriver alt.
 Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for kommandoerne.
 
 - Scout: par mellem 30 min og 72 t gamle, mcap $300k–$20M (DexScreener, GeckoTerminal, Jupiter).
-- Filter dræber, hvis: mint/freeze ikke er revoked, LP ikke er brændt/låst (90 %), liq < $40k,
+- Filter dræber, hvis: mint/freeze ikke er revoked, LP ikke er brændt/låst (95 %), liq < $40k,
   1h-vol < $50k, top10 > 25 %, dev > 3 % eller tidligere rugs, bundle > 10 %, eller +80 % på 1 time.
 - Analyst scorer 0–100 (momentum, unikke købere, køb/salg, holdervækst, liq/mcap, smart wallets).
   Tærsklen er **73**. Brugeren valgte den efter en backtest, hvor alt under 73 tabte.
-- Executor: maks. 8 % pr. handel, ingen grænse for prisvirkning, ingen grænse for antal åbne
-  positioner, og 120 min karantæne efter salg.
-- Risk: stop −6 % under indgang, trailing stop slås til ved +12 % og ligger 6 % under toppen.
-  Kursen tjekkes hvert 3. sekund.
+- Executor: fast 1 % af kontoen pr. handel, maks. 1 % prisvirkning, maks. 3 åbne positioner,
+  og 120 min karantæne efter salg. Scanning hvert 20. sekund.
+- Risk: stop −6 % under indgang, trailing stop slås til ved +8 % og ligger 6 % under toppen.
+  Kursen tjekkes hvert sekund.
 - Alle tærskler står i `desk/config.py`.
 
 ## Sådan køres den
 - `python3 -m desk run --dashboard 8787` (brug `python3`, ikke `python`, på brugerens Mac).
 - Dashboardet ligger på `http://127.0.0.1:8787` (dansk UI, 4 faner).
 - Papirbogen gemmes portabelt i `runs/state.json` og gendannes, når databasen er tom.
-- Testene køres med `python3 -m unittest discover -s tests` (46 tests).
+- Testene køres med `python3 -m unittest discover -s tests` (47 tests).
 - I cloud-sessioner køres desken i blokke på 2 timer (`--hours 1.95`). Efter hver blok committes
   `runs/state.json` og dagens rapport. Der arbejdes på branchen `claude/gallant-planck-vsfkxd`.
 

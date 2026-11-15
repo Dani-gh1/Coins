@@ -29,7 +29,7 @@ class ScoutConfig:
 
 @dataclass
 class FilterConfig:
-    min_lp_locked_pct: float = 90.0          # LP burned or locked on the traded pair
+    min_lp_locked_pct: float = 95.0          # LP burned or locked on the traded pair
     min_liquidity_usd: float = 40_000.0
     min_volume_1h_usd: float = 50_000.0
     max_top10_pct: float = 25.0               # excludes AMM pools / lockers
@@ -61,19 +61,19 @@ class AnalystConfig:
     # A wallet only counts as a buyer if it bought at least this much in the window;
     # buys under dust_usd are treated as bot-farmed holders.
     real_buyer_min_usd: float = 25.0
-    dust_usd: float = 5.0
+    dust_usd: float = 5.0                     # = min_buy_size_usd
 
 
 @dataclass
 class ExecutorConfig:
     mode: str = "paper"                       # only "paper" is implemented
     starting_equity_usd: float = 10_000.0
-    max_position_pct: float = 8.0             # hard cap per trade, % of equity
-    max_open_positions: int = 0               # 0 = no limit (cash is then the only cap)
+    max_position_pct: float = 1.0             # fixed stake per trade, % of equity
+    max_open_positions: int = 3               # 0 = no limit
     min_order_usd: float = 25.0
     # Optional cap on Jupiter's quoted price impact: shrink the order until the quote fits.
-    # 0 = no cap (default): every order is the full max_position_pct, whatever it costs.
-    max_price_impact_pct: float = 0.0
+    # 0 = no cap.
+    max_price_impact_pct: float = 1.0
     quote_slippage_bps: int = 500
     tx_cost_usd: float = 0.05                 # network + priority fee per swap (paper)
     reentry_cooldown_minutes: float = 120.0   # after a sale, wait this long before rebuying the coin (0 = off)
@@ -82,15 +82,15 @@ class ExecutorConfig:
 @dataclass
 class RiskConfig:
     stop_loss_pct: float = 6.0                # set before entry, anchored to the fill
-    trail_trigger_pct: float = 12.0           # trailing stop arms at +12%
+    trail_trigger_pct: float = 8.0            # trailing stop arms at +8%
     trail_distance_pct: float = 6.0           # then trails the high by this much
-    poll_seconds: float = 3.0                 # how often open positions are marked and stops checked
+    poll_seconds: float = 1.0                 # how often open positions are marked and stops checked
     stale_price_seconds: float = 300.0
 
 
 @dataclass
 class DeskConfig:
-    scan_interval_seconds: float = 60.0
+    scan_interval_seconds: float = 20.0
     data_dir: str = "runs"
     smart_wallet_seed_file: str = "data/smart_wallets.txt"
     learner_pools_per_cycle: int = 2

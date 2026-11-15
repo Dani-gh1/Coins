@@ -4,7 +4,7 @@ import unittest
 import urllib.request
 from pathlib import Path
 
-from desk.config import DeskConfig
+from desk.config import DeskConfig, ExecutorConfig, RiskConfig
 from desk.dashboard import DashboardServer, _drop_restarts, equity_points, rule_code, snapshot
 from desk.desk import Desk
 
@@ -16,7 +16,7 @@ class SnapshotTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = Path(self.tmp.name) / "desk.db"
         self.src = sources()
-        self.desk = Desk(DeskConfig(data_dir=self.tmp.name, smart_wallet_seed_file="/nonexistent"),
+        self.desk = Desk(DeskConfig(data_dir=self.tmp.name, smart_wallet_seed_file="/nonexistent", executor=ExecutorConfig(max_position_pct=8.0, max_open_positions=0, max_price_impact_pct=0.0)),
                          "test", echo=False, sources=self.src)
 
     def tearDown(self):

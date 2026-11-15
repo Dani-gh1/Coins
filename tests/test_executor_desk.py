@@ -43,7 +43,10 @@ def passing_plan(src, mint="GOOD") -> RiskPlan:
     fp = FilterPass(candidate=c, checks={}, jupiter=src.jup.tokens_[mint])
     sc = Analyst(AnalystConfig(), src, _Book()).score(fp, trades(n_real=150, n_sells=40), time.time())
     assert sc.passed, sc.components
-    return Risk(RiskConfig(), AnalystConfig()).plan(sc)
+    return Risk(RiskConfig(trail_trigger_pct=12.0), AnalystConfig()).plan(sc)
+
+
+LEGACY = dict(max_position_pct=8.0, max_open_positions=0, max_price_impact_pct=0.0)
 
 
 class ExecutorTests(unittest.TestCase):
@@ -51,8 +54,8 @@ class ExecutorTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.store = Store(Path(self.tmp.name) / "t.db")
         self.src = sources()
-        self.risk = Risk(RiskConfig(), AnalystConfig())
-        self.ex = Executor(ExecutorConfig(), self.src, self.store, self.risk)
+        self.risk = Risk(RiskConfig(trail_trigger_pct=12.0), AnalystConfig())
+        self.ex = Executor(ExecutorConfig(**LEGACY), self.src, self.store, self.risk)
 
     def tearDown(self):
         self.store.close()
@@ -88,7 +91,7 @@ class ExecutorTests(unittest.TestCase):
         self.assertAlmostEqual(pos.stop_price, pos.entry_price * 0.94)   # stop still set at the fill
 
     def capped(self, pct=2.0) -> Executor:
-        return Executor(ExecutorConfig(max_price_impact_pct=pct), self.src, self.store, self.risk)
+        return Executor(ExecutorConfig(**{**LEGACY, 'max_price_impact_pct': pct}), self.src, self.store, self.risk)
 
     def test_impact_that_never_fits_is_rejected(self):
         self.src.jup.impact_pct = 3.0          # flat 3% at any size: nothing fits a 2% cap
@@ -106,7 +109,7 @@ class ExecutorTests(unittest.TestCase):
 
     def test_exit_books_pnl_and_survives_restart(self):
         fill, pos = self.ex.enter(passing_plan(self.src))
-        ex2 = Executor(ExecutorConfig(), self.src, self.store, self.risk)   # restart
+        ex2 = Executor(ExecutorConfig(**LEGACY), self.src, self.store, self.risk)   # restart
         self.assertEqual(len(ex2.positions), 1)
         self.assertAlmostEqual(ex2.cash, self.ex.cash)
         self.src.jup.price["GOOD"] = 0.0009
@@ -122,7 +125,7 @@ class ExecutorTests(unittest.TestCase):
         self.assertFalse(ex2.in_cooldown("GOOD", now=closed.closed_ts + 121 * 60))
 
     def test_cooldown_can_be_switched_off_and_a_position_limit_set(self):
-        ex = Executor(ExecutorConfig(reentry_cooldown_minutes=0, max_open_positions=1),
+        ex = Executor(ExecutorConfig(**{**LEGACY, 'reentry_cooldown_minutes': 0, 'max_open_positions': 1}),
                       self.src, self.store, self.risk)
         fill, pos = ex.enter(passing_plan(self.src))
         other = passing_plan(self.src, mint="OTHER")
@@ -143,6 +146,18 @@ class ExecutorTests(unittest.TestCase):
         self.assertGreater(opened, 10)                                 # past the old limit of 10
         self.assertLess(self.ex.cash, 25)                              # stopped only when the cash ran out
         self.assertGreaterEqual(self.ex.cash, 0)
+
+
+class NewDefaultsTests(unittest.TestCase):
+    def test_new_rules(self):
+        from desk.config import load_config
+        c = load_config()
+        self.assertEqual((c.executor.max_position_pct, c.executor.max_open_positions,
+                          c.executor.max_price_impact_pct, c.executor.reentry_cooldown_minutes),
+                         (1.0, 3, 1.0, 120.0))
+        self.assertEqual((c.risk.stop_loss_pct, c.risk.trail_trigger_pct, c.risk.trail_distance_pct,
+                          c.risk.poll_seconds), (6.0, 8.0, 6.0, 1.0))
+        self.assertEqual((c.filter.min_lp_locked_pct, c.scan_interval_seconds), (95.0, 20.0))
 
 
 class SmartWalletTests(unittest.TestCase):

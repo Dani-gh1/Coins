@@ -24,7 +24,7 @@ Agents only talk through the immutable messages in `desk/messages.py`. The Execu
 | **Scout** | pair age 30 min – 72 h, market cap $300k – $20M, quoted in SOL/USDC/USDT | DexScreener (source of truth). Mints are fed in from DexScreener profiles/boosts/takeovers, Jupiter trending/traded/organic/recent and GeckoTerminal trending/new/top-volume pools |
 | **Filter** | kill: mint authority not revoked | Solana RPC `getAccountInfo` (falls back to RugCheck, then Jupiter) |
 | | kill: freeze authority not revoked | same |
-| | kill: LP < 90% burned/locked on the traded pair | RugCheck `markets[].lp.lpLockedPct` |
+| | kill: LP < 95% burned/locked on the traded pair | RugCheck `markets[].lp.lpLockedPct` |
 | | kill: liquidity < $40k | DexScreener |
 | | kill: 1h volume < $50k | DexScreener |
 | | kill: top 10 holders > 25% (AMM pools and lockers excluded) | RugCheck `topHolders` |
@@ -33,8 +33,8 @@ Agents only talk through the immutable messages in `desk/messages.py`. The Execu
 | | kill: bundled launch > 10% of supply | RugCheck insider networks (linked-wallet clusters) + insider-flagged holders |
 | | kill: already +80% in 1h | DexScreener |
 | **Analyst** | score 0–100, only 73+ passes (`analyst.min_score`) | see below |
-| **Executor** | 8% of equity per trade (the hard cap in code). Optional `executor.max_price_impact_pct` shrinks an order until its quote fits; it is off by default | Jupiter quote API |
-| **Risk** | stop −6% from the fill, set in the same step as the fill; trailing stop arms at +12% and trails 6% under the high | Jupiter price API (DexScreener fallback) |
+| **Executor** | fixed 1% of equity per trade, max 3 open positions; `executor.max_price_impact_pct` (1%) shrinks an order until its quote fits | Jupiter quote API |
+| **Risk** | stop −6% from the fill, set in the same step as the fill; trailing stop arms at +8% and trails 6% under the high | Jupiter price API (DexScreener fallback) |
 | **Logger** | every candidate, kill (with every failed rule and its measured value), score, plan, fill, exit | `runs/desk.db`, `runs/<run>/events.jsonl` |
 
 The Filter fails closed. If RugCheck or the authority check can't be read, the coin is killed
