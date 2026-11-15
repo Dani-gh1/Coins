@@ -299,6 +299,7 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
     }
 
     return {
+        "runs": _runs(q, now),
         "status": {
             "running": bool(span["b"]) and now - span["b"] < RUNNING_WITHIN_S,
             "last_event_ts": span["b"], "first_event_ts": span["a"],
@@ -327,6 +328,39 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
         "top_scores": top_scores,
         "activity": activity,
     }
+
+
+def _runs(q, now: float, keep: int = 40) -> dict:
+    """When the desk ran: one row per start. A run ends at its stop event; if it never logged one
+    (crash, container reset) it ends at the last time the next start saw it alive."""
+    rows = q("SELECT ts, kind, payload FROM events WHERE agent='desk' AND kind IN ('start','stop') ORDER BY ts")
+    runs: list[dict] = []
+    for r in rows:
+        p = json.loads(r["payload"] or "{}")
+        if r["kind"] == "start":
+            if runs and runs[-1]["end"] is None:       # previous run never stopped
+                seen = p.get("prev_last_seen")
+                if not (seen and runs[-1]["start"] <= seen <= r["ts"]):    # older runs: last event it logged
+                    seen = q("SELECT MAX(ts) AS t FROM events WHERE ts >= ? AND ts < ?",
+                             (runs[-1]["start"], r["ts"]))[0]["t"]
+                runs[-1]["end"] = seen or runs[-1]["start"]
+                runs[-1]["state"] = "afbrudt"
+            runs.append({"start": r["ts"], "end": None, "state": "kører"})
+        elif runs and runs[-1]["end"] is None:
+            runs[-1]["end"], runs[-1]["state"] = r["ts"], "stoppet"
+    if runs and runs[-1]["end"] is None:
+        last = q("SELECT MAX(ts) AS t FROM events")[0]["t"] or runs[-1]["start"]
+        if now - last < RUNNING_WITHIN_S:
+            runs[-1]["end"] = None
+        else:
+            runs[-1]["end"], runs[-1]["state"] = last, "afbrudt"
+    day_start = now - 86400
+    covered = sum(max(0.0, (x["end"] or now) - max(x["start"], day_start)) for x in runs
+                  if (x["end"] or now) > day_start)
+    first = runs[0]["start"] if runs else now
+    span = min(86400.0, now - first)
+    return {"sessions": runs[-keep:][::-1], "uptime_24h_pct": (covered / span * 100) if span > 0 else None,
+            "count": len(runs)}
 
 
 class _Handler(BaseHTTPRequestHandler):

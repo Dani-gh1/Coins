@@ -853,6 +853,28 @@ function healthCard(state) {
   ]));
 }
 
+function runsCard(state) {
+  const rn = state.runs || { sessions: [] };
+  const cols = "grid-template-columns: minmax(120px,1.2fr) minmax(120px,1.2fr) 90px minmax(110px,1fr) minmax(110px,1fr)";
+  const rows = rn.sessions.map((x, i) => {
+    const next = rn.sessions[i - 1];                  // the run that followed this one
+    const gap = next && x.end ? next.start - x.end : null;
+    const label = x.state === "kører" ? "Kører nu" : x.state === "afbrudt" ? "Afbrudt uden stop" : "Stoppet";
+    return h("div", { class: "row flat", style: cols },
+      h("div", { text: when(x.start) }),
+      h("div", { text: x.end ? when(x.end) : "–" }),
+      h("div", { class: "num", text: duration((x.end || state.generated_ts) - x.start) }),
+      h("div", { text: label }),
+      h("div", { text: gap != null && gap > 120 ? "Hul på " + duration(gap) : "" }));
+  });
+  const up = rn.uptime_24h_pct;
+  return card("Kørselshistorik", "Hver gang desken er startet, hvornår den sluttede, og hvor længe den stod stille imellem." +
+      (up != null ? " Oppetid seneste døgn: " + num(up, 0) + " %." : ""),
+    rows.length ? h("div", { class: "rows" },
+      h("div", { class: "rhead", style: cols }, ...["Startet", "Sluttet", "Varighed", "Status", "Hul før næste"].map((t) => h("div", { text: t }))),
+      rows) : h("div", { class: "empty", text: "Ingen kørsler registreret endnu." }));
+}
+
 // ---- tabs, theme and the render loop --------------------------------------------
 const TABS = [["overblik", "Overblik"], ["handler", "Handler"], ["marked", "Marked"], ["desk", "Desk"]];
 let activeTab = TABS.some(([id]) => "#" + id === location.hash) ? location.hash.slice(1) : "overblik";
@@ -923,7 +945,7 @@ function render(state) {
     panel("handler", statsCard(state), openCard(state), closedCard(state, 50)),
     panel("marked", windowCard(state), h("div", { class: "grid2" }, funnelCard(state), killsCard(state)),
       h("div", { class: "grid2" }, scoresCard(state), recentKillsCard(state))),
-    panel("desk", healthCard(state), rulesCard(state), activityCard(state, 25)));
+    panel("desk", healthCard(state), runsCard(state), rulesCard(state), activityCard(state, 25)));
   selectTab(activeTab);
   $("foot").textContent = "Papirhandel: ingen rigtige penge er i spil. Siden opdaterer sig selv hvert 5. sekund.";
 }

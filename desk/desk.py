@@ -254,7 +254,11 @@ class Desk:
         signal.signal(signal.SIGTERM, _stop)
         signal.signal(signal.SIGINT, _stop)
 
-        self.log.event("desk", "start", {"hours": hours, "equity": self.executor.equity(),
+        prev_seen = self.store.get_account("last_seen")
+        prev_clean = self.store.get_account("clean_stop", True)
+        self.store.set_account("clean_stop", False)
+        self.store.set_account("last_seen", time.time())
+        self.log.event("desk", "start", {"hours": hours, "prev_last_seen": prev_seen, "prev_clean": prev_clean, "equity": self.executor.equity(),
                                          "open_positions": len(self.executor.positions),
                                          "smart_wallets": self.book.size()},
                        line=f"run {self.run_id} starting (paper) equity ${self.executor.equity():,.2f}")
@@ -268,6 +272,7 @@ class Desk:
                 except Exception as e:
                     self.log.event("desk", "error", {"error": repr(e), "trace": traceback.format_exc()},
                                    line=f"scan error: {e!r}")
+                self.store.set_account("last_seen", time.time())
                 if self.cycle % 30 == 0:
                     self.book.prune()
                 if deadline and time.time() >= deadline:
@@ -281,6 +286,8 @@ class Desk:
             self.stop_event.set()
             risk_thread.join(timeout=30)
             self.save_state()
+            self.store.set_account("last_seen", time.time())
+            self.store.set_account("clean_stop", True)
             self.log.event("desk", "stop", {"equity": self.executor.equity(),
                                             "open_positions": len(self.executor.positions),
                                             "http": dict(self.src.http.stats)},
