@@ -38,7 +38,7 @@ def build_report(store: Store, run_id: str | None = None) -> str:
         stage_counts[k["stage"]] += 1
         for r in json.loads(k["reasons"]):
             code = r.split(":", 1)[0] if k["stage"] == "filter" else (
-                "score_below_70" if r.startswith("score") else r.split(":", 1)[0])
+                "score_below_min" if r.startswith("score") else r.split(":", 1)[0])
             reason_counts[(k["stage"], code)] += 1
     killed_mints = store.query(f"SELECT COUNT(DISTINCT mint) n FROM kills {where}", params)[0]["n"]
     scores = [dict(r) for r in store.query(f"SELECT * FROM scores {where} ORDER BY score DESC", params)]
@@ -91,7 +91,7 @@ def build_report(store: Store, run_id: str | None = None) -> str:
 
     out.append("## Analyst scores\n")
     passed = [s for s in scores if s["passed"]]
-    out.append(f"{len(scores)} scorecards, {len(passed)} at 70+.\n")
+    out.append(f"{len(scores)} scorecards, {len(passed)} passed the score threshold.\n")
     if scores:
         out.append("| symbol | when | score | momentum | unique buyers | buy/sell | holder growth | liq/mcap | smart wallets |")
         out.append("|---|---|---|---|---|---|---|---|---|")
@@ -119,7 +119,7 @@ def build_report(store: Store, run_id: str | None = None) -> str:
     for k in store.query(f"SELECT mint, stage, reasons FROM kills {where}", params):
         if k["mint"] in coins:
             for r in json.loads(k["reasons"]):
-                code = "score < 70" if k["stage"] == "analyst" else r.split(":", 1)[0]
+                code = "score below threshold" if k["stage"] == "analyst" else r.split(":", 1)[0]
                 if k["stage"] == "executor":
                     code = f"executor: {r}" if not r.startswith("price impact") else "executor: price impact"
                 coins[k["mint"]]["reasons"][code] += 1

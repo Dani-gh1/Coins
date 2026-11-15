@@ -5,7 +5,7 @@ on-chain data. It paper-trades them with real Jupiter quotes and logs every deci
 including every coin it kills.
 
 ```
-Scout ──Candidate──▶ Filter ──FilterPass──▶ Analyst ──ScoreCard(≥70)──▶ Risk ──RiskPlan──▶ Executor
+Scout ──Candidate──▶ Filter ──FilterPass──▶ Analyst ──ScoreCard(≥73)──▶ Risk ──RiskPlan──▶ Executor
                        │                       │                                           │
                       Kill                  Kill/Defer                       Fill + Position (stop set at fill)
                                                                                            │
@@ -32,7 +32,7 @@ Agents only talk through the immutable messages in `desk/messages.py`. The Execu
 | | kill: dev past rugs | RugCheck "creator history of rugged tokens", `rugged` flag, or ≥ 3 dead prior launches |
 | | kill: bundled launch > 10% of supply | RugCheck insider networks (linked-wallet clusters) + insider-flagged holders |
 | | kill: already +80% in 1h | DexScreener |
-| **Analyst** | score 0–100, only 70+ passes | see below |
+| **Analyst** | score 0–100, only 73+ passes (`analyst.min_score`) | see below |
 | **Executor** | 8% of equity per trade (the hard cap in code). Optional `executor.max_price_impact_pct` shrinks an order until its quote fits; it is off by default | Jupiter quote API |
 | **Risk** | stop −6% from the fill, set in the same step as the fill; trailing stop arms at +12% and trails 6% under the high | Jupiter price API (DexScreener fallback) |
 | **Logger** | every candidate, kill (with every failed rule and its measured value), score, plan, fill, exit | `runs/desk.db`, `runs/<run>/events.jsonl` |

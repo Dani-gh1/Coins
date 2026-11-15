@@ -57,7 +57,7 @@ class AnalystTests(unittest.TestCase):
         a = Analyst(AnalystConfig(), None, _Book())
         sc = card(a, trades(n_real=150, n_sells=40))
         self.assertTrue(sc.passed, sc.components)
-        self.assertGreaterEqual(sc.score, 70)
+        self.assertGreaterEqual(sc.score, AnalystConfig().min_score)
         self.assertIsNone(sc.components["smart_wallets"])
         self.assertTrue(any("smart_wallets unavailable" in n for n in sc.notes))
 

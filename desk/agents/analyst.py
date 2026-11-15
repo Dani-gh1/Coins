@@ -1,4 +1,4 @@
-"""Analyst: score each filter survivor 0-100. Only 70+ is handed to Risk.
+"""Analyst: score each filter survivor 0-100. Only scores at or above min_score (73) go to Risk.
 
 Component (default weight)  input                                           0 pts -> 100 pts
 momentum        (20%)  DexScreener 1h/5m price change + 5m volume pace        see momentum()

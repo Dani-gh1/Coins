@@ -45,7 +45,7 @@ class FilterConfig:
 
 @dataclass
 class AnalystConfig:
-    min_score: float = 70.0
+    min_score: float = 73.0                   # only scorecards at or above this are bought
     weights: dict[str, float] = field(default_factory=lambda: {
         "momentum": 0.20,
         "unique_buyers": 0.20,

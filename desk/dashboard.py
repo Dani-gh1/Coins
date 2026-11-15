@@ -90,7 +90,7 @@ def equity_points(rows: list, start_ts: float | None, start_equity: float, max_p
     return [[round(t, 1), round(e, 2)] for t, e in pts]
 
 
-def snapshot(db_path: str | Path, min_score: float = 70.0, now: float | None = None,
+def snapshot(db_path: str | Path, min_score: float = 73.0, now: float | None = None,
              rules: dict | None = None) -> dict:
     """`rules` is the desk's configuration (thresholds), shown on the page as the active rules."""
     now = now or time.time()
@@ -364,7 +364,7 @@ class DashboardServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, db_path: str | Path, host: str = "127.0.0.1", port: int = 8787,
-                 min_score: float = 70.0, cache_seconds: float = 2.0, rules: dict | None = None):
+                 min_score: float = 73.0, cache_seconds: float = 2.0, rules: dict | None = None):
         super().__init__((host, port), _Handler)
         self.db_path = Path(db_path)
         self.min_score = min_score

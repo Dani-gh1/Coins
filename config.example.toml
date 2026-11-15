@@ -21,7 +21,7 @@ max_bundle_pct = 10
 max_price_change_1h_pct = 80
 
 [analyst]
-min_score = 70
+min_score = 73
 real_buyer_min_usd = 25
 dust_usd = 5
 min_smart_wallet_book = 10

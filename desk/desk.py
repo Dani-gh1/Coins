@@ -2,7 +2,7 @@
 
 scan loop (every scan_interval_seconds)
     Scout -> Candidate -> Filter -> FilterPass | Kill
-                       -> Analyst -> ScoreCard (>=70) | Kill | Deferral
+                       -> Analyst -> ScoreCard (>= min_score) | Kill | Deferral
                        -> Risk.plan -> RiskPlan -> Executor.enter -> Fill + Position | Kill
     then the smart-wallet learner sweeps a couple of trending pools.
 risk loop (every risk.poll_seconds)
