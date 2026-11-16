@@ -360,7 +360,7 @@ const RULES = {
   already_pumped: "Allerede steget for meget på 1 time", mint_authority: "Mint-rettighed ikke tilbagekaldt",
   freeze_authority: "Freeze-rettighed ikke tilbagekaldt", lp_unlocked: "LP ikke brændt eller låst",
   top10_concentration: "Top 10 ejer for meget", dev_holding: "Udvikleren ejer for meget",
-  dev_rugs: "Udvikleren har tidligere rugs", bundled: "Bundtet lancering",
+  dev_rugs: "Udvikleren har tidligere rugs", bundled: "Bundtet lancering", token_extension: "Farlig token-funktion",
   data_unavailable: "Data kunne ikke bekræftes", score_below_min: "Score under grænsen",
   price_impact: "Ordren ville flytte prisen for meget", reentry_cooldown: "Karantæne efter salg",
   max_positions: "Maks. antal positioner nået", already_holding: "Ejes allerede",
@@ -369,7 +369,7 @@ const RULES = {
 const STAGES = { filter: "Filter", analyst: "Analyst", executor: "Executor", risk: "Risk" };
 const PARTS = [["momentum", "Momentum"], ["unique_buyers", "Købere"], ["buy_sell", "Køb/salg"],
                ["holder_growth", "Holdere"], ["liq_mcap", "Likviditet"], ["smart_wallets", "Smart wallets"]];
-const EXITS = { stop_loss: "Stop loss", trailing_stop: "Trailing stop" };
+const EXITS = { stop_loss: "Stop loss", trailing_stop: "Trailing stop", stale_price: "Ingen kurs" };
 const ruleName = (code) => RULES[code] || code;
 
 function reasonText(stage, r) {
@@ -708,8 +708,17 @@ function closedCard(state, limit) {
 // ---- the test period: is the strategy good enough to consider real money? ----------
 const TEST_MIN = 30, TEST_GOAL = 50, MAX_DD_OK = -5;
 function testCard(state) {
-  const a = state.account, t = state.closed_trades, n = t.length, st = tradeStats(state);
-  const dd = state.equity_curve.length ? maxDrawdown(state.equity_curve) : 0;
+  // Only trades made under the current rules count (config: rules_since).
+  const sinceIso = state.rules && state.rules.rules_since, since = sinceIso ? Date.parse(sinceIso) / 1000 : 0;
+  const t = state.closed_trades.filter((x) => x.opened_ts >= since), n = t.length;
+  const older = state.closed_trades.length - n;
+  const sub = { ...state, closed_trades: t, status: { ...state.status, first_event_ts: Math.max(since, state.status.first_event_ts || 0) } };
+  const st = tradeStats(sub);
+  const wins = t.filter((x) => x.pnl_usd > 0).length;
+  const openNew = state.open_positions.filter((x) => x.opened_ts >= since);
+  const a = { wins, return_pct: t.reduce((s, x) => s + x.account_pct, 0) + openNew.reduce((s, x) => s + x.account_pct, 0) };
+  const curve = state.equity_curve.filter((p) => p[0] >= since);
+  const dd = curve.length ? maxDrawdown(curve) : 0;
   const stopAt = state.rules ? -state.rules.risk.stop_loss_pct : -6;
   const stops = t.filter((x) => x.exit_reason === "stop_loss");
   const stopAvg = stops.length ? stops.reduce((sum, x) => sum + x.pnl_pct, 0) / stops.length : null;
@@ -731,15 +740,17 @@ function testCard(state) {
     { s: enough ? "ok" : "wait", t: "Nok handler", v: num(n) + " af " + TEST_MIN,
       why: enough ? "Nu er der nok data til, at tallene betyder noget." : "Under " + TEST_MIN + " handler kan held og uheld vende alt. Tallene nedenfor er foreløbige." },
     { s: ev == null ? "wait" : state3(ev > 0, true), t: "Forventet pr. handel", v: ev == null ? "–" : pct(ev), why: evWhy },
-    { s: state3(a.return_pct > 0, true), t: "Kontoen i plus", v: pct(a.return_pct, 2), why: "Det samlede afkast siden start, inkl. åbne positioner." },
+    { s: state3(a.return_pct > 0, true), t: "Kontoen i plus", v: pct(a.return_pct, 2), why: "Afkastet fra handlerne i testperioden, inkl. åbne positioner, i procent af startkontoen." },
     { s: state3(dd > MAX_DD_OK, true), t: "Største fald fra top", v: pct(dd, 2),
-      why: "Hvor meget kontoen højst er faldet fra sit højeste punkt. Med 1 % indsats pr. handel bør det holde sig over " + pct(MAX_DD_OK, 0) + "." },
+      why: "Hvor meget kontoen højst er faldet fra sit højeste punkt i testperioden. Med 1 % indsats pr. handel bør det holde sig over " + pct(MAX_DD_OK, 0) + "." },
     { s: stopAvg == null ? "wait" : state3(stopAvg > stopAt - 2, true), t: "Salg ved stop", v: stopAvg == null ? "–" : pct(stopAvg),
       why: "Stoppet står på " + pct(stopAt, 0) + ", men kursen kan nå at falde mere, før der sælges. "
         + (stops.length ? "Gennemsnit af " + stops.length + " stop-salg. Mere end 2 point under stoppet er et faresignal for rigtig handel." : "Ingen stop-salg endnu.") },
   ];
   const mark = { ok: "✓", bad: "!", wait: "…" };
-  return card("Testperioden", "Mål: " + TEST_MIN + "–" + TEST_GOAL + " lukkede handler, før der tages stilling til rigtige penge.",
+  const subline = "Mål: " + TEST_MIN + "–" + TEST_GOAL + " lukkede handler, før der tages stilling til rigtige penge."
+    + (since ? " Tæller handler fra " + when(since) + ", hvor de nuværende regler trådte i kraft" + (older ? " (" + older + " ældre handler er ikke med)." : ".") : "");
+  return card("Testperioden", subline,
     h("div", null,
       h("div", { class: "progress-head" },
         h("span", { class: "big", text: num(n) + " / " + TEST_GOAL + " handler" }),

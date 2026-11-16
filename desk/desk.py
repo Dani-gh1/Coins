@@ -27,8 +27,9 @@ from .agents.risk import Risk
 from .agents.scout import Scout
 from .config import DeskConfig
 from .dashboard import equity_points
-from .messages import Deferral, Kill, ScoreCard
+from .messages import Deferral, ExitSignal, Kill, ScoreCard
 from .smart_wallets import SmartWalletBook
+from .net import RISK_RPM, Http
 from .sources import Sources
 from .store import Store
 
@@ -44,12 +45,15 @@ class Desk:
         restored = self._restore_state()
         self.log = Logger(self.store, self.run_dir / "events.jsonl", run_id, echo=echo)
         self.src = sources or Sources()
+        # The risk loop gets its own client: short timeouts, one retry and its own share of each
+        # API's rate limit, so a slow scan (or a 429 back-off on it) never delays a stop.
+        self.risk_src = sources or Sources(Http(timeout=6.0, retries=1, rpm=RISK_RPM))
         self.book = SmartWalletBook(self.store, cfg.smart_wallet_seed_file)
         self.scout = Scout(cfg.scout, self.src)
         self.filter = Filter(cfg.filter, self.src)
         self.analyst = Analyst(cfg.analyst, self.src, self.book)
         self.risk = Risk(cfg.risk, cfg.analyst)
-        self.executor = Executor(cfg.executor, self.src, self.store, self.risk)
+        self.executor = Executor(cfg.executor, self.src, self.store, self.risk, exit_sources=self.risk_src)
         self.stop_event = threading.Event()
         now = time.time()
         self.recheck_at: dict[str, float] = {
@@ -202,21 +206,21 @@ class Desk:
         positions = self.executor.open_positions()
         if not positions:
             return
-        marks = self.src.jup.prices([p.mint for p in positions])
-        missing = [p.mint for p in positions if p.mint not in marks]
-        if missing:
-            for pair in self.src.dex.pairs_for_tokens(missing):
-                mint = (pair.get("baseToken") or {}).get("address")
-                if mint in missing and pair.get("priceUsd") and mint not in marks:
-                    marks[mint] = float(pair["priceUsd"])
+        marks = self._marks(positions)
         now = time.time()
         for pos in positions:
             mark = marks.get(pos.mint)
             if mark is None:
-                if now - pos.last_price_ts > self.cfg.risk.stale_price_seconds:
-                    self.log.event("risk", "stale_price", {"position_id": pos.id,
-                                                           "age_s": round(now - pos.last_price_ts)},
-                                   mint=pos.mint, symbol=pos.symbol)
+                age = now - pos.last_price_ts
+                if age > self.cfg.risk.stale_price_seconds and self.executor.exit_due(pos.id, now):
+                    # No price from any source for minutes: often a pulled pool. Try to sell at a
+                    # real quote; if there is no route the position stays open and is retried.
+                    sig = ExitSignal(position_id=pos.id, mint=pos.mint, symbol=pos.symbol, reason="stale_price",
+                                     mark_price=pos.last_price, stop_price=pos.stop_price, ts=now)
+                    self.log.event("risk", "stale_price", {"position_id": pos.id, "age_s": round(age)},
+                                   mint=pos.mint, symbol=pos.symbol,
+                                   line=f"STALE {pos.symbol:<10} no price for {age:.0f}s - trying to sell")
+                    self._exit(pos, sig)
                 continue
             decision = self.risk.evaluate(pos, mark, now)
             if decision.trail_active and not pos.trail_active:
@@ -226,14 +230,45 @@ class Desk:
                                line=f"TRAIL {pos.symbol:<10} armed at {mark:.8g} (+"
                                     f"{(mark / pos.entry_price - 1) * 100:.1f}%), stop -> {decision.stop_price:.8g}")
             self.executor.apply(decision, now)
-            if decision.exit:
+            if decision.exit and self.executor.exit_due(pos.id, now):
                 self.log.exit_signal(decision.exit)
-                result = self.executor.exit(decision.exit)
-                if result:
-                    self.log.fill(*result)
-                else:
-                    self.log.event("executor", "exit_retry", {"position_id": pos.id},
-                                   mint=pos.mint, symbol=pos.symbol, line=f"exit for {pos.symbol} pending (no route)")
+                self._exit(pos, decision.exit)
+
+    def _exit(self, pos, sig: ExitSignal) -> None:
+        result = self.executor.exit(sig)
+        if result:
+            self.log.fill(*result)
+        else:
+            self.log.event("executor", "exit_retry", {"position_id": pos.id, "reason": sig.reason},
+                           mint=pos.mint, symbol=pos.symbol, line=f"exit for {pos.symbol} pending (no route)")
+
+    def _marks(self, positions) -> dict[str, float]:
+        """Mark each position on the pool it was bought from (DexScreener), falling back to the
+        deepest pair and then to Jupiter's price. Jupiter is the fallback, not the source, because
+        without an API key it allows only 30 requests a minute - not enough for 1 s checks."""
+        marks: dict[str, float] = {}
+        want = {p.mint: p.pair_address for p in positions}
+        best: dict[str, tuple[float, float]] = {}
+        for pair in self.risk_src.dex.pairs_for_tokens(list(want)):
+            mint = (pair.get("baseToken") or {}).get("address")
+            try:
+                price = float(pair.get("priceUsd") or 0)
+            except (TypeError, ValueError):
+                continue
+            if mint not in want or price <= 0:
+                continue
+            if pair.get("pairAddress") == want[mint]:
+                marks[mint] = price
+                continue
+            liq = float((pair.get("liquidity") or {}).get("usd") or 0)
+            if liq > best.get(mint, (-1.0, 0.0))[0]:
+                best[mint] = (liq, price)
+        for mint, (_, price) in best.items():
+            marks.setdefault(mint, price)
+        missing = [m for m in want if m not in marks]
+        if missing:
+            marks.update(self.risk_src.jup.prices(missing))
+        return marks
 
     def _risk_loop(self) -> None:
         while not self.stop_event.is_set():

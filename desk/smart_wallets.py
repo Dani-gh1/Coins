@@ -154,6 +154,12 @@ class SmartWalletBook:
                 promoted.append(w)
         return promoted
 
-    def prune(self, max_age_s: float = 72 * 3600) -> None:
-        """Forget watermarks for coins not traded in a while (they age out of the 72h window)."""
-        self.store.execute("DELETE FROM trade_marks WHERE ts < ?", (time.time() - max_age_s,))
+    def prune(self, max_age_s: float = 72 * 3600, ledger_age_s: float = 7 * 86400) -> None:
+        """Forget watermarks for coins not traded in a while (they age out of the 72h window), and
+        ledger rows with no activity for a week. The ledger grows by tens of thousands of rows a
+        day; without this the database would keep growing for as long as the desk runs. Promoted
+        wallets stay in smart_wallets either way."""
+        now = time.time()
+        self.store.execute("DELETE FROM trade_marks WHERE ts < ?", (now - max_age_s,))
+        self.store.execute("DELETE FROM wallet_token WHERE MAX(COALESCE(first_buy_ts, 0), "
+                           "COALESCE(last_sell_ts, 0)) < ?", (now - ledger_age_s,))

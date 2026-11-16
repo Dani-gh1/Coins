@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import threading
 import time
@@ -13,14 +14,33 @@ from collections import defaultdict
 USER_AGENT = "memecoin-desk/0.1"
 
 # Requests per minute we allow ourselves per host (below each API's published limit).
+# The desk runs two clients side by side: the scan loop (HOST_RPM) and the risk loop
+# (RISK_RPM, see desk.py), each with its own limiter. Per host the two must add up to
+# less than the API's limit, since the API counts them together.
+#   Jupiter without an API key: 0.5 requests/s = 30/min (dev.jup.ag "Rate Limits").
+#   DexScreener: 300/min on the pairs/tokens endpoints, 60/min on profiles/boosts.
+#   GeckoTerminal: the public limit is not stated clearly; 24/min drew regular 429s.
+#   With a free Jupiter API key (env JUPITER_API_KEY) the desk uses api.jup.ag at 60/min.
 HOST_RPM = {
-    "api.dexscreener.com": 200,
-    "api.geckoterminal.com": 24,
+    "api.dexscreener.com": 180,
+    "api.geckoterminal.com": 18,
     "api.rugcheck.xyz": 40,
-    "lite-api.jup.ag": 50,
+    "lite-api.jup.ag": 18,
+    "api.jup.ag": 36,
     "api.mainnet-beta.solana.com": 100,
 }
+RISK_RPM = {
+    "api.dexscreener.com": 90,     # one mark request per risk tick (all positions in one call)
+    "lite-api.jup.ag": 10,         # sell quotes for exits, and a price fallback
+    "api.jup.ag": 20,
+}
+
+# Optional Jupiter API key, read from the environment only (never stored in the repo or logged).
+JUPITER_API_KEY = os.environ.get("JUPITER_API_KEY", "").strip()
+JUPITER_HOST = "api.jup.ag" if JUPITER_API_KEY else "lite-api.jup.ag"
+HOST_HEADERS = {"api.jup.ag": {"x-api-key": JUPITER_API_KEY}} if JUPITER_API_KEY else {}
 DEFAULT_RPM = 60
+MAX_RETRY_AFTER_S = 30.0
 
 
 class HttpError(Exception):
@@ -52,10 +72,25 @@ class _Limiter:
             self.next_at = max(self.next_at, time.monotonic() + seconds)
 
 
+def _retry_after(headers) -> float | None:
+    """Seconds the server asks us to wait: Retry-After, or Jupiter's x-ratelimit-reset (unix time)."""
+    if headers is None:
+        return None
+    try:
+        if headers.get("Retry-After"):
+            return max(0.0, float(headers["Retry-After"]))
+        if headers.get("x-ratelimit-reset"):
+            return max(0.0, float(headers["x-ratelimit-reset"]) - time.time())
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
 class Http:
-    def __init__(self, timeout: float = 20.0, retries: int = 3):
+    def __init__(self, timeout: float = 20.0, retries: int = 3, rpm: dict[str, int] | None = None):
         self.timeout = timeout
         self.retries = retries
+        self.rpm = {**HOST_RPM, **(rpm or {})}
         self._limiters: dict[str, _Limiter] = {}
         self._lock = threading.Lock()
         self.stats: dict[str, int] = defaultdict(int)
@@ -63,7 +98,7 @@ class Http:
     def _limiter(self, host: str) -> _Limiter:
         with self._lock:
             if host not in self._limiters:
-                self._limiters[host] = _Limiter(HOST_RPM.get(host, DEFAULT_RPM))
+                self._limiters[host] = _Limiter(self.rpm.get(host, DEFAULT_RPM))
             return self._limiters[host]
 
     def get(self, url: str, params: dict | None = None):
@@ -80,7 +115,7 @@ class Http:
         last_err: Exception | None = None
         for attempt in range(self.retries + 1):
             limiter.wait()
-            headers = {"accept": "application/json", "user-agent": USER_AGENT}
+            headers = {"accept": "application/json", "user-agent": USER_AGENT, **HOST_HEADERS.get(host, {})}
             if data is not None:
                 headers["content-type"] = "application/json"
             req = urllib.request.Request(url, data=data, headers=headers)
@@ -98,6 +133,9 @@ class Http:
                 last_err = HttpError(url, e.code, e.reason)
                 if e.code == 429 or e.code >= 500:
                     backoff = (2 ** attempt) * 2 + random.random()
+                    retry_after = _retry_after(e.headers)
+                    if retry_after is not None:
+                        backoff = max(backoff, min(retry_after, MAX_RETRY_AFTER_S))
                     limiter.penalize(backoff)
                     continue
                 raise last_err from None

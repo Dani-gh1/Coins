@@ -1,4 +1,4 @@
-"""Executor: the paper broker. Every order is 8% of equity (the hard maximum per trade).
+"""Executor: the paper broker. Every order is executor.max_position_pct of equity (1%; 8% is the hard maximum).
 
 Hard handoff: an order is only accepted with an approved RiskPlan whose ScoreCard passed.
 Fills are priced off live Jupiter quotes for the exact size (USDC <-> token), so price
@@ -28,13 +28,20 @@ class HandoffError(RuntimeError):
 class Executor:
     name = "executor"
 
-    def __init__(self, cfg: ExecutorConfig, sources: Sources, store: Store, risk: Risk):
+    # A sale that finds no route is retried at most this often, and only booked at a modelled
+    # price once it has failed for this long while the market still prices the coin.
+    EXIT_RETRY_S = 10.0
+    HAIRCUT_AFTER_S = 60.0
+
+    def __init__(self, cfg: ExecutorConfig, sources: Sources, store: Store, risk: Risk,
+                 exit_sources: Sources | None = None):
         if cfg.mode != "paper":
             raise NotImplementedError("live execution is not implemented; run in paper mode")
         if cfg.max_position_pct > 8.0:
             raise ValueError("max_position_pct may not exceed 8%")
         self.cfg = cfg
         self.src = sources
+        self.exit_src = exit_sources or sources
         self.store = store
         self.risk = risk
         self.lock = threading.RLock()
@@ -47,7 +54,8 @@ class Executor:
             d = dict(row)
             d["trail_active"] = bool(d["trail_active"])
             self.positions[d["id"]] = Position(**d)
-        self.exit_failures: dict[str, int] = {}
+        self.exit_failures: dict[str, tuple[int, float]] = {}   # position -> (failures, first failure ts)
+        self.exit_tried: dict[str, float] = {}
 
     # ---- state ---------------------------------------------------------------
     def _save(self, pos: Position) -> None:
@@ -202,27 +210,37 @@ class Executor:
             pos.last_price_ts = now or time.time()
             self._save(pos)
 
+    def exit_due(self, position_id: str, now: float | None = None) -> bool:
+        """False while a failed sale is waiting for its next retry (so a missing route is not
+        re-quoted every second, which would burn the API's rate limit)."""
+        last = self.exit_tried.get(position_id)
+        return last is None or (now or time.time()) - last >= self.EXIT_RETRY_S
+
     def exit(self, sig: ExitSignal) -> tuple[Fill, Position] | None:
         with self.lock:
             pos = self.positions.get(sig.position_id)
             if not pos:
                 return None
             pos = replace(pos)
-        quote = self.src.jup.sell_quote(pos.mint, pos.qty_raw, self.cfg.quote_slippage_bps)
+        now = time.time()
+        quote = self.exit_src.jup.sell_quote(pos.mint, pos.qty_raw, self.cfg.quote_slippage_bps)
         if quote is not None:
             proceeds = int(quote["outAmount"]) / 1e6
             impact = float(quote.get("priceImpactPct") or 0) * 100.0
             source = "jupiter-quote"
         else:
-            fails = self.exit_failures.get(pos.id, 0) + 1
-            self.exit_failures[pos.id] = fails
-            if fails < 3:
+            self.exit_tried[pos.id] = now
+            fails, first = self.exit_failures.get(pos.id, (0, now))
+            fails += 1
+            self.exit_failures[pos.id] = (fails, first)
+            # Only book a modelled price when the market still prices the coin (a fresh mark) and
+            # the sale has failed for a while. A stale position is never booked at an old price:
+            # it stays open, and the dashboard keeps showing it, until a real quote sells it.
+            if fails < 3 or now - first < self.HAIRCUT_AFTER_S or sig.reason == "stale_price":
                 return None
-            # No route three times in a row: book it at the mark minus a 5% haircut.
             impact = 5.0
             proceeds = pos.qty * sig.mark_price * 0.95
             source = "model-haircut"
-        now = time.time()
         with self.lock:
             live = self.positions.pop(pos.id, None)
             if live is None:
@@ -237,6 +255,7 @@ class Executor:
             self.store.set_account("cash", self.cash)
             self._save(live)
             self.exit_failures.pop(pos.id, None)
+            self.exit_tried.pop(pos.id, None)
         fill = Fill(side="sell", position_id=live.id, mint=live.mint, symbol=live.symbol, usd=proceeds,
                     tokens=live.qty, price=live.exit_price, impact_pct=impact, source=source, ts=now)
         return fill, replace(live)

@@ -10,6 +10,9 @@ Tier 2 (contract + holder safety, only for tier-1 survivors):
   dev > 3% of supply                       RugCheck creatorBalance / creator in top holders
   dev past rugs                            RugCheck rug-history risk, rugged flag, dead launches
   bundled launch > 10%                     RugCheck insider networks + insider-flagged holders
+  dangerous Token-2022 extension           RugCheck token_extensions / transferFee: a permanent
+                                           delegate (can take tokens from any wallet), a transfer
+                                           hook, transfer fees, pausable or non-transferable
 """
 from __future__ import annotations
 
@@ -19,7 +22,7 @@ from ..config import FilterConfig
 from ..messages import Candidate, FilterPass, Kill
 from ..sources import Sources, parse_iso
 
-STRUCTURAL = {"mint_authority", "freeze_authority", "lp_unlocked", "dev_rugs", "bundled"}
+STRUCTURAL = {"mint_authority", "freeze_authority", "lp_unlocked", "dev_rugs", "bundled", "token_extension"}
 
 
 def market_checks(c: Candidate, cfg: FilterConfig) -> tuple[list[str], dict]:
@@ -64,6 +67,32 @@ def traded_market(rug: dict, pair_address: str) -> tuple[dict | None, bool]:
     return max(markets, key=depth), False
 
 
+def dangerous_extensions(rug: dict) -> list[str]:
+    """Token-2022 extensions that let someone take, block or tax a holder's tokens. Plain
+    pump.fun tokens use Token-2022 too, but only with metadata extensions, which pass."""
+    ext = rug.get("token_extensions") or {}
+    out = []
+    if (ext.get("permanentDelegate") or {}).get("delegate"):
+        out.append("permanent delegate (can move tokens out of any wallet)")
+    if (ext.get("transferHook") or {}).get("programId"):
+        out.append("transfer hook (a program can block sales)")
+    if ext.get("nonTransferable"):
+        out.append("non-transferable")
+    if ext.get("pausableConfig"):
+        out.append("pausable transfers")
+    if ext.get("defaultAccountState") and "frozen" in str(ext["defaultAccountState"]).lower():
+        out.append("new accounts start frozen")
+    fee_cfg = ext.get("transferFeeConfig") or {}
+    fee_pct = float((rug.get("transferFee") or {}).get("pct") or 0)
+    bps = [float((fee_cfg.get(k) or {}).get("transferFeeBasisPoints") or 0)
+           for k in ("olderTransferFee", "newerTransferFee")]
+    if fee_pct > 0 or any(b > 0 for b in bps):
+        out.append(f"transfer fee ({max([fee_pct] + [b / 100 for b in bps]):g}%)")
+    elif fee_cfg.get("transferFeeConfigAuthority"):
+        out.append("transfer fee can be switched on")
+    return out
+
+
 def safety_checks(c: Candidate, rug: dict | None, mint_info: dict | None, jup: dict | None,
                   cfg: FilterConfig, now: float | None = None) -> tuple[list[str], list[str], dict]:
     """Returns (reasons, reason_codes, metrics)."""
@@ -102,6 +131,12 @@ def safety_checks(c: Candidate, rug: dict | None, mint_info: dict | None, jup: d
     if rug is None:
         fail("data_unavailable", "RugCheck report unavailable (LP/holders/dev/bundles unverified)")
         return reasons, codes, metrics
+
+    # --- Token-2022 extensions that can trap or take a holder's tokens ----
+    bad_ext = dangerous_extensions(rug)
+    metrics["token_extensions"] = bad_ext
+    if bad_ext:
+        fail("token_extension", ", ".join(bad_ext))
 
     supply = float((rug.get("token") or {}).get("supply") or 0) or (mint_info or {}).get("supply") or 0
     holders = rug.get("topHolders") or []

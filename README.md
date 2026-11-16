@@ -31,6 +31,7 @@ Agents only talk through the immutable messages in `desk/messages.py`. The Execu
 | | kill: dev holds > 3% | RugCheck creator balance / creator wallets in top holders |
 | | kill: dev past rugs | RugCheck "creator history of rugged tokens", `rugged` flag, or ≥ 3 dead prior launches |
 | | kill: bundled launch > 10% of supply | RugCheck insider networks (linked-wallet clusters) + insider-flagged holders |
+| | kill: dangerous Token-2022 extension (permanent delegate, transfer hook, transfer fee, pausable, non-transferable, frozen by default) | RugCheck `token_extensions`, `transferFee` |
 | | kill: already +80% in 1h | DexScreener |
 | **Analyst** | score 0–100, only 73+ passes (`analyst.min_score`) | see below |
 | **Executor** | fixed 1% of equity per trade, max 3 open positions; `executor.max_price_impact_pct` (1%) shrinks an order until its quote fits | Jupiter quote API |
@@ -75,7 +76,7 @@ python3 -m desk once                           # a single scan cycle
 python3 -m desk report --run-id night1         # P&L, trades, kill table, top scores
 python3 -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
 python3 -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
-python3 -m unittest discover -s tests -t .     # 46 offline tests
+python3 -m unittest discover -s tests -t .     # 57 offline tests
 ```
 
 ### Dashboard
@@ -123,17 +124,27 @@ enough to commit).
 ## Know before trusting the numbers
 
 - **Paper only.** `executor.mode` must be `paper`. There is no live broker and no key handling.
-- Orders are not shrunk to fit the pool. An 8% order on a $40–60k pool pays roughly 3–4.5%
-  in price impact going in and again coming out, and the −6% stop is measured from that fill,
-  so it sits only about 2% under the market price at entry.
-- By default there is no cap on open positions: cash is the only limit (about twelve 8%
-  positions). `executor.max_open_positions` brings a cap back. After a sale the same coin is
-  not bought again for two hours (`executor.reentry_cooldown_minutes`).
+- Orders are shrunk until Jupiter's quoted price impact is at most 1%
+  (`executor.max_price_impact_pct`). The −6% stop is measured from the fill, which includes
+  that impact, and the sale pays impact again, so a stop realises more than −6%. The first four
+  trades (14–15 Nov, 8% stakes, no impact cap) paid 1–5% going in and 2–3% going out.
+- At most 3 positions are open at once (`executor.max_open_positions`). After a sale the same
+  coin is not bought again for two hours (`executor.reentry_cooldown_minutes`).
 - Fills use real Jupiter quotes for the exact size, so price impact and pool fees are real.
   Latency, MEV, failed transactions and priority-fee spikes are not modelled. Each swap is
   charged a flat $0.05.
-- Stops are checked every 3 s against the mark price. On a fast dump the exit fills at the
-  next quote, so a "−6% stop" can realise a bigger loss. The journal records the actual fill.
+- Stops are checked every second against the price of the pool the coin was bought from
+  (DexScreener; Jupiter's price is the fallback). The risk loop has its own HTTP client and its
+  own share of each API's rate limit, so a slow scan never delays a stop. On a fast dump the exit
+  fills at the next quote, so a "−6% stop" can realise a bigger loss. The journal records the
+  actual fill.
+- A sale that finds no route is retried every 10 s. Only after a minute of failures while the
+  coin still has a market price is it booked at that price minus 5% (`model-haircut`). A
+  position with no price from any source for 5 minutes is sold at the next real quote and is
+  never booked at an old price.
+- Jupiter allows 30 requests a minute without an API key. Set `JUPITER_API_KEY` (a free key from
+  portal.jup.ag gives 60 a minute) and the desk switches to `api.jup.ag` with the key in the
+  `x-api-key` header. The key is read from the environment only.
 - "Bundled launch" relies on RugCheck's linked-wallet insider networks. That is a strong proxy,
   not a slot-by-slot reconstruction of the launch block.
 - The smart-wallet component is absent for the first hours of a fresh desk while the book fills.

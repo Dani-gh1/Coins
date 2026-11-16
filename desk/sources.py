@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 
 from .config import USDC_MINT
-from .net import Http, HttpError
+from .net import JUPITER_HOST, Http, HttpError
 
 
 def parse_iso(ts: str | None) -> float | None:
@@ -86,9 +86,10 @@ class RugCheck:
 
 
 class Jupiter:
-    TOKENS = "https://lite-api.jup.ag/tokens/v2"
-    PRICE = "https://lite-api.jup.ag/price/v3"
-    QUOTE = "https://lite-api.jup.ag/swap/v1/quote"
+    # lite-api.jup.ag without a key (30 requests/min), api.jup.ag with JUPITER_API_KEY set.
+    TOKENS = f"https://{JUPITER_HOST}/tokens/v2"
+    PRICE = f"https://{JUPITER_HOST}/price/v3"
+    QUOTE = f"https://{JUPITER_HOST}/swap/v1/quote"
 
     def __init__(self, http: Http):
         self.http = http

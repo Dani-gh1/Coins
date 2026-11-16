@@ -96,14 +96,25 @@ class FakeHttp:
 
 
 class FakeDex:
-    def __init__(self, pairs):
+    def __init__(self, pairs, live_prices=None):
         self.pairs = pairs
+        self.live_prices = live_prices      # optional mint -> price dict that the pairs follow
 
     def discovery_mints(self):
         return {p["baseToken"]["address"]: "dexscreener:test" for p in self.pairs}
 
     def pairs_for_tokens(self, mints):
-        return [p for p in self.pairs if p["baseToken"]["address"] in mints]
+        out = []
+        for p in self.pairs:
+            mint = p["baseToken"]["address"]
+            if mint not in mints:
+                continue
+            if self.live_prices is not None:
+                if mint not in self.live_prices:
+                    continue
+                p = {**p, "priceUsd": str(self.live_prices[mint])}
+            out.append(p)
+        return out
 
 
 class FakeRug:
@@ -171,8 +182,8 @@ class FakeRPC:
 class FakeSources:
     def __init__(self, pairs, rugs, jup_tokens, prices, trades_by_pool, rpc_infos=None, impact_pct=0.5):
         self.http = FakeHttp()
-        self.dex = FakeDex(pairs)
         self.rug = FakeRug(rugs)
         self.jup = FakeJup(jup_tokens, prices, impact_pct)
+        self.dex = FakeDex(pairs, live_prices=self.jup.price)   # one market: both feeds show the same price
         self.gecko = FakeGecko(trades_by_pool)
         self.rpc = FakeRPC(rpc_infos or {})

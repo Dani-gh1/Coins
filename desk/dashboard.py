@@ -401,8 +401,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(404, "text/plain; charset=utf-8", b"not found")
         except (BrokenPipeError, ConnectionResetError):
             pass
-        except Exception as e:  # a bad read must not kill the server
-            self._send(500, "application/json", json.dumps({"error": repr(e)}).encode())
+        except Exception:  # a bad read must not kill the server (and the page is public: no details)
+            self._send(500, "application/json", b'{"error": "internal error"}')
 
     def log_message(self, *_args) -> None:   # keep the desk's console clean
         pass
