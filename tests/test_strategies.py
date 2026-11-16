@@ -100,7 +100,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -338,3 +338,10 @@ class Strategy11Tests(unittest.TestCase):
             self.assertIsNone(s11.consider(coin("NEXT"), 90.0, ok, 6))     # paused for 24 h
             desk.log.close()
             desk.store.close()
+
+
+class Strategy12Tests(unittest.TestCase):
+    def test_max_stake_and_long_pause(self):
+        from desk.strategies import STRATEGIES
+        s12 = next(s for s in STRATEGIES if s.key == "s12")
+        self.assertEqual((s12.stake_pct, s12.pause_after_losses, s12.pause_hours, s12.min_score), (8.0, 2, 48, 76))

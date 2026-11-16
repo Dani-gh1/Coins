@@ -16,6 +16,7 @@ virtual account, so they can be compared fairly from the same start.
   10 Kræsen+           strategy 6 sharpened: $150k+ liquidity, 0.3% impact, at most +40% in 1h,
                        top 10 <= 20%, bundles <= 5%, 3% stake
   11 Kræsen+ stor      strategy 10 with a 6% stake and a 24 h pause after 2 losses in a row
+  12 Kræsen+ max       strategy 10 with an 8% stake (the desk's hard maximum) and a 48 h pause after 2 losses
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -183,6 +184,16 @@ STRATEGIES = (
             "Risk": ["Pause i 24 t. efter 2 tab i træk"],
         }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
         pause_after_losses=2, pause_hours=24),
+    StrategyRules(
+        "s12", "Kræsen+ max", 30, 72, 300_000, 20_000_000, 95, 76, 8.0, 0.3, 3, 120, 6, 15, 10,
+        _rules({
+            "Idé": ["Strategi 11 med den højeste indsats, desken tillader (8 %), og en længere pause"],
+            "Alt andet": ["Som strategi 10: likviditet ≥ $150k, prisvirkning ≤ 0,3 %, højst +40 % på 1 t.,",
+                          "top 10 ≤ 20 %, bundtede ≤ 5 %, score ≥ 76, trailing +15 %/10 %, stop −6 %"],
+            "Executor": ["8 % af kontoen pr. handel", "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Pause i 48 t. efter 2 tab i træk"],
+        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
+        pause_after_losses=2, pause_hours=48),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 
