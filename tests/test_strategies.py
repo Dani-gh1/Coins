@@ -158,3 +158,33 @@ class Strategy4Tests(unittest.TestCase):
             self.assertGreater(r["pnl_usd"], 0)
             desk.log.close()
             desk.store.close()
+
+
+class ResetTests(unittest.TestCase):
+    def test_a_new_epoch_starts_every_book_over_once_and_leaves_the_paper_account(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent", strategy_epoch="a")
+            first = Desk(cfg, "t", echo=False, sources=market())
+            first.scan_cycle()
+            cash, shadows = first.executor.cash, len(first.store.query("SELECT * FROM shadow_positions"))
+            self.assertGreater(len(first.store.query("SELECT * FROM strategy_positions")), 0)
+            first.log.close()
+            first.store.close()
+            # same epoch: nothing is wiped
+            again = Desk(cfg, "t", echo=False, sources=market())
+            self.assertFalse(again.lab.reset)
+            self.assertGreater(len(again.store.query("SELECT * FROM strategy_positions")), 0)
+            again.log.close()
+            again.store.close()
+            # new epoch: all books start over together; the paper account and the shadow book stay
+            cfg.strategy_epoch = "b"
+            fresh = Desk(cfg, "t", echo=False, sources=market())
+            self.assertTrue(fresh.lab.reset)
+            self.assertEqual(fresh.store.query("SELECT * FROM strategy_positions"), [])
+            starts = {r["start_ts"] for r in fresh.store.query("SELECT start_ts FROM strategy_account")}
+            self.assertEqual(len(starts), 1)
+            self.assertTrue(all(b.cash == 10_000 for b in fresh.lab.books))
+            self.assertAlmostEqual(fresh.executor.cash, cash)
+            self.assertEqual(len(fresh.store.query("SELECT * FROM shadow_positions")), shadows)
+            fresh.log.close()
+            fresh.store.close()

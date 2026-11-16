@@ -125,7 +125,8 @@ COLS = list(BookPosition.__dataclass_fields__)
 
 
 class StrategyBook:
-    def __init__(self, rules: StrategyRules, store: Store, fit, tx_cost_usd: float, min_order_usd: float):
+    def __init__(self, rules: StrategyRules, store: Store, fit, tx_cost_usd: float, min_order_usd: float,
+                 start_ts: float | None = None):
         self.r = rules
         self.store = store
         self.fit = fit                  # (mint, usd, cap) -> (quote, usd, impact_pct, tried)
@@ -136,7 +137,7 @@ class StrategyBook:
         if row:
             self.start_ts, self.start_equity, self.cash = row[0]["start_ts"], row[0]["start_equity"], row[0]["cash"]
         else:
-            self.start_ts, self.start_equity, self.cash = time.time(), START_EQUITY, START_EQUITY
+            self.start_ts, self.start_equity, self.cash = start_ts or time.time(), START_EQUITY, START_EQUITY
             self._save_account()
         self.open: dict[str, BookPosition] = {}
         for r in store.query("SELECT * FROM strategy_positions WHERE strategy=? AND status='open'", (rules.key,)):
@@ -249,16 +250,33 @@ class StrategyBook:
         return p
 
 
+def reset_if_new_epoch(store: Store, epoch: str | None) -> bool:
+    """Start every book over (once) when the configured epoch changes. Only the strategy test's
+    own tables and journal lines are removed; the paper account and the shadow book stay."""
+    if not epoch or store.get_account("strategy_epoch") == epoch:
+        return False
+    with store.lock:
+        for table in ("strategy_account", "strategy_positions", "strategy_equity"):
+            store.conn.execute(f"DELETE FROM {table}")
+        store.conn.execute("DELETE FROM events WHERE agent='strategy'")
+        store.conn.execute("DELETE FROM account WHERE key='strategy_mark_every_s'")
+        store.conn.commit()
+    store.set_account("strategy_epoch", epoch)
+    return True
+
+
 class StrategyLab:
-    """The three books, fed from the desk's pipeline and marked from the shadow thread."""
+    """The strategy books, fed from the desk's pipeline and marked from the shadow thread."""
     EQUITY_EVERY_S = 60.0
 
     def __init__(self, store: Store, fit, tx_cost_usd: float, min_order_usd: float, risk, stale_s: float,
-                 strategies=STRATEGIES):
+                 strategies=STRATEGIES, epoch: str | None = None):
+        self.reset = reset_if_new_epoch(store, epoch)
         self.store = store
         self.risk = risk
         self.stale_s = stale_s
-        self.books = [StrategyBook(s, store, fit, tx_cost_usd, min_order_usd) for s in strategies]
+        start = time.time()                    # books created together share one start
+        self.books = [StrategyBook(s, store, fit, tx_cost_usd, min_order_usd, start) for s in strategies]
         self._equity_at = 0.0
 
     def wants(self, c: Candidate) -> bool:

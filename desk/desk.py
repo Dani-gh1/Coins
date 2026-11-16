@@ -65,7 +65,10 @@ class Desk:
         # Strategy test (desk/strategies.py): three rule sets on virtual accounts, fed from this pipeline.
         self.lab = StrategyLab(self.store, lambda mint, usd, cap: self.executor._fit_size(mint, usd, cap=cap),
                                cfg.executor.tx_cost_usd, cfg.executor.min_order_usd, self.risk,
-                               cfg.risk.stale_price_seconds) if cfg.strategy_test else None
+                               cfg.risk.stale_price_seconds, epoch=cfg.strategy_epoch) if cfg.strategy_test else None
+        if self.lab and self.lab.reset:
+            self.log.event("desk", "strategy_reset", {"epoch": cfg.strategy_epoch},
+                           line=f"strategy test started over ({cfg.strategy_epoch}): every book from the same moment")
         self.notify = notifier or Notifier.from_env()
         self.notify.on_error = lambda err: self.log.event(
             "notify", "error", {"error": err}, line=f"notification failed: {err}")

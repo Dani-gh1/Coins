@@ -123,6 +123,9 @@ class DeskConfig:
     rules_since: str = "2026-11-15T15:10:00Z"
     # Strategy test (desk/strategies.py): three rule sets on virtual accounts, side by side.
     strategy_test: bool = True
+    # Change this to start every strategy book over at the same moment (the desk wipes the
+    # strategy tables once, at the first start with a new value). The paper account is untouched.
+    strategy_epoch: str = "2026-11-16-4strategier"
     # Which page the dashboard serves: "strategies" (temporary: only the strategy test) or
     # "full" (the normal dashboard). The user asked for the strategy page until further notice.
     dashboard_view: str = "strategies"
