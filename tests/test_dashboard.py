@@ -119,7 +119,7 @@ class SnapshotTests(unittest.TestCase):
         try:
             with opener.open(base + "/") as r:
                 self.assertEqual(r.status, 200)
-                self.assertIn(b"Moonshot", r.read())
+                self.assertIn(b"Nova", r.read())
             with opener.open(base + "/apple-touch-icon.png") as r:
                 self.assertEqual(r.read()[:4], b"\x89PNG")
             with opener.open(base + "/api/state") as r:
