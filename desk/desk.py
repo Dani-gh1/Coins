@@ -513,7 +513,7 @@ class Desk:
                      + " | Jupiter: " + ("API key" if JUPITER_API_KEY else "keyless"))
         if prev_clean:
             self.notify.send("Desken er startet", f"Kontoen står på {pct(self._return_pct(), 2)} · "
-                             f"{len(self.executor.positions)} åbne positioner", tags=("arrow_forward",), priority=2)
+                             f"{len(self.executor.positions)} åbne positioner", tags=("arrow_forward",), priority=3)
         else:
             self.notify.send("Desken genstartede efter et nedbrud",
                              f"Den stoppede uden at lukke pænt ned og kører nu igen · kontoen står på {pct(self._return_pct(), 2)}",
