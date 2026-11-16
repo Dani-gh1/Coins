@@ -19,6 +19,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PAGE = Path(__file__).with_name("dashboard.html")
+STATIC_DIR = Path(__file__).with_name("static")
+# Home-screen icon and web-app manifest, so the page can be added to a phone as an app.
+STATIC = {
+    "/icon.svg": ("icon.svg", "image/svg+xml"),
+    "/icon-180.png": ("icon-180.png", "image/png"),
+    "/apple-touch-icon.png": ("icon-180.png", "image/png"),
+    "/icon-192.png": ("icon-192.png", "image/png"),
+    "/icon-512.png": ("icon-512.png", "image/png"),
+    "/favicon.ico": ("icon-192.png", "image/png"),
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+}
 RUNNING_WITHIN_S = 180.0      # the desk logs a scan every cycle; quieter than this = stopped
 ACTIVITY_KINDS = ("fill_buy", "fill_sell", "exit_signal", "trail_armed", "start", "stop",
                   "error", "smart_wallets_learned")
@@ -380,6 +391,9 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             if path in ("/", "/index.html"):
                 self._send(200, "text/html; charset=utf-8", PAGE.read_bytes())
+            elif path in STATIC:
+                name, ctype = STATIC[path]
+                self._send(200, ctype, (STATIC_DIR / name).read_bytes())
             elif path == "/api/state":
                 body = json.dumps(self.server.state()).encode()          # type: ignore[attr-defined]
                 self._send(200, "application/json", body)
