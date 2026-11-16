@@ -100,7 +100,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13", "s14"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -355,3 +355,17 @@ class Strategy13Tests(unittest.TestCase):
         diff = {k for k, v in asdict(s13).items() if asdict(s12)[k] != v} - {"key", "name", "rules"}
         self.assertEqual(diff, {"stake_pct"})
         self.assertEqual(s13.stake_pct, 15.0)
+
+
+class Strategy14Tests(unittest.TestCase):
+    def test_max_picky_is_at_least_as_strict_as_every_other_picky_strategy(self):
+        from desk.strategies import STRATEGIES
+        by = {s.key: s for s in STRATEGIES}
+        s14 = by["s14"]
+        for k in ("s6", "s10", "s11", "s12", "s13"):
+            o = by[k]
+            self.assertGreaterEqual(s14.min_score, o.min_score)
+            self.assertGreaterEqual(s14.min_liq_usd, o.min_liq_usd)
+            self.assertLessEqual(s14.impact_cap_pct, o.impact_cap_pct)
+            self.assertGreaterEqual(s14.min_lp_pct, o.min_lp_pct)
+        self.assertEqual((s14.min_score, s14.stake_pct, s14.max_bundle_pct), (82, 15.0, 3))

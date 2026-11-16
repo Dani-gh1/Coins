@@ -18,6 +18,8 @@ virtual account, so they can be compared fairly from the same start.
   11 Kræsen+ stor      strategy 10 with a 6% stake and a 24 h pause after 2 losses in a row
   12 Kræsen+ max       strategy 10 with an 8% stake (the desk's hard maximum) and a 48 h pause after 2 losses
   13 Kræsen+ 15 %      strategy 12 with a 15% stake: virtual only (the paper account's cap stays 8%)
+  14 Max kræsen        every picky setting at its tightest realistic value (score >= 82, $250k liquidity,
+                       0.2% impact, LP 100%, top 10 <= 15%, dev <= 1%, bundles <= 3%) and a 15% stake
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -206,6 +208,19 @@ STRATEGIES = (
             "Risk": ["Pause i 48 t. efter 2 tab i træk", "Ét stop-tab koster ca. 1,4 % af kontoen"],
         }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
         pause_after_losses=2, pause_hours=48),
+    StrategyRules(
+        "s14", "Max kræsen", 30, 72, 300_000, 20_000_000, 100, 82, 15.0, 0.2, 3, 120, 6, 15, 10,
+        _rules({
+            "Idé": ["Alle kræsne krav skruet helt op, og 15 % indsats som strategi 13",
+                    "Score 82 er det højeste, der er set mere end én gang på 2,6 dage"],
+            "Filter": ["Likviditet ≥ $250k, 1-times volumen ≥ $150k, højst +25 % på 1 t.",
+                       "LP 100 % brændt/låst, top 10 ≤ 15 %, udvikler ≤ 1 %, bundtede ≤ 3 %"],
+            "Analyst": ["Køber ved score 82 eller mere"],
+            "Executor": ["15 % af kontoen pr. handel", "Prisvirkning højst 0,2 %", "Køber ikke, hvis kursen har flyttet sig over 1 %",
+                         "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Pause i 48 t. efter 2 tab i træk"],
+        }), min_liq_usd=250_000, min_vol_1h_usd=150_000, max_change_1h_pct=25, max_top10_pct=15,
+        max_dev_pct=1, max_bundle_pct=3, max_entry_drift_pct=1.0, pause_after_losses=2, pause_hours=48),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 
