@@ -1,5 +1,6 @@
 """Strategy test: three rule sets on virtual accounts, fed from the desk's pipeline."""
 import tempfile
+import time
 import unittest
 import urllib.request
 
@@ -99,7 +100,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -221,5 +222,46 @@ class Strategy6Tests(unittest.TestCase):
             self.assertNotIn("s6", buyers(candidate(mint="C", symbol="C", liq=80_000, mcap=800_000), 90.0))
             s6 = next(b for b in desk.lab.books if b.r.key == "s6")
             self.assertEqual((s6.r.trail_trigger_pct, s6.r.trail_distance_pct, s6.r.impact_cap_pct), (15, 10, 0.5))
+            desk.log.close()
+            desk.store.close()
+
+
+class Strategy7Tests(unittest.TestCase):
+    def lab(self, d):
+        desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=market())
+        return desk, next(b for b in desk.lab.books if b.r.key == "s7")
+
+    def coin(self, desk, mint, **kw):
+        desk.src.jup.tokens_[mint], desk.src.jup.price[mint] = jup_token(mint), kw.pop("px", 0.001)
+        return candidate(mint=mint, symbol=mint, **kw)
+
+    def test_profile_b_rules(self):
+        ok = {"lp_locked_pct": 100.0, "top10_pct": 15.0, "dev_pct": 1.0, "bundle_pct": 2.0}
+        with tempfile.TemporaryDirectory() as d:
+            desk, b = self.lab(d)
+            self.assertIsNone(b.consider(self.coin(desk, "A"), 77.0, ok, 6))                      # score < 78
+            self.assertIsNone(b.consider(self.coin(desk, "B"), 80.0, {**ok, "lp_locked_pct": 99.0}, 6))
+            self.assertIsNone(b.consider(self.coin(desk, "C"), 80.0, {**ok, "top10_pct": 21.0}, 6))
+            self.assertIsNone(b.consider(self.coin(desk, "D"), 80.0, {**ok, "bundle_pct": None}, 6))  # fail closed
+            self.assertIsNone(b.consider(self.coin(desk, "E", age_h=30.0), 80.0, ok, 6))           # older than 24 h
+            self.assertIsNone(b.consider(self.coin(desk, "F", pc_h1=60.0), 80.0, ok, 6))           # +60% in 1 h
+            self.assertIsNone(b.consider(self.coin(desk, "G", px=0.00103), 80.0, ok, 6))           # quote 3% above scan
+            p = b.consider(self.coin(desk, "H"), 80.0, ok, 6)
+            self.assertIsNotNone(p)
+            self.assertEqual(p.entry_impact_pct, 1.25)                                           # the cost floor
+            desk.log.close()
+            desk.store.close()
+
+    def test_pause_after_three_losses_and_six_hour_cooldown(self):
+        ok = {"lp_locked_pct": 100.0, "top10_pct": 15.0, "dev_pct": 1.0, "bundle_pct": 2.0}
+        with tempfile.TemporaryDirectory() as d:
+            desk, b = self.lab(d)
+            for m in ("L1", "L2", "L3"):
+                p = b.consider(self.coin(desk, m), 80.0, ok, 6)
+                b._close(p, p.entry_price * 0.9, "stop_loss", time.time())
+            self.assertTrue(b.paused(time.time()))
+            self.assertIsNone(b.consider(self.coin(desk, "NEW"), 90.0, ok, 6))
+            self.assertFalse(b.paused(time.time() + 12 * 3600 + 1))
+            self.assertEqual(b.r.cooldown_minutes, 360)
             desk.log.close()
             desk.store.close()

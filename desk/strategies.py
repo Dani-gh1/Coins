@@ -8,6 +8,8 @@ virtual account, so they can be compared fairly from the same start.
   4  Længere trailing  strategy 2, but the trailing stop arms at +15% and trails 10% under the high
   5  Dybe pools        strategy 2, but only pools with $100k+ liquidity and at most 0.5% price impact
   6  Kræsen            score >= 76, $100k+ liquidity, at most 0.5% impact, trailing from +15% / 10%
+  7  Profil B          the user's own profile: 1-24 h, $300k-$10M, stricter filters, score >= 78,
+                       6 h cooldown, 2% entry drift cap, >= 1.25% cost per side, 12 h pause after 3 losses
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -49,6 +51,17 @@ class StrategyRules:
     trail_distance_pct: float
     rules: tuple[tuple[str, tuple[str, ...]], ...] = field(default=())
     min_liq_usd: float = 40_000.0    # the Filter already requires $40k; a book can ask for more
+    # Stricter filters a book can add on top of the shared Filter (None = use the shared rule).
+    # A missing measurement fails the check (fail closed, like the Filter).
+    min_vol_1h_usd: float | None = None
+    max_change_1h_pct: float | None = None
+    max_top10_pct: float | None = None
+    max_dev_pct: float | None = None
+    max_bundle_pct: float | None = None
+    max_entry_drift_pct: float | None = None   # skip if the quote's price moved more than this since the scan
+    min_cost_per_side_pct: float = 0.0        # costs per side are at least this (floor on the real impact)
+    pause_after_losses: int = 0               # after this many losses in a row ...
+    pause_hours: float = 0.0                  # ... buy nothing for this long (0 = never pause)
 
 
 def _rules(r: dict) -> tuple:
@@ -109,6 +122,21 @@ STRATEGIES = (
             "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 0,5 %", "Højst 3 åbne", "Karantæne 2 t."],
             "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen"],
         }), min_liq_usd=100_000),
+    StrategyRules(
+        "s7", "Profil B", 60, 24, 300_000, 10_000_000, 100, 78, 1.0, 1.0, 3, 360, 6, 8, 6,
+        _rules({
+            "Scout": ["Alder 1–24 t.", "Markedsværdi $300k–$10 mio."],
+            "Filter": ["Likviditet ≥ $60k, 1-times volumen ≥ $100k, højst +50 % på 1 t.",
+                       "Mint/freeze tilbagekaldt, LP 100 % brændt/låst",
+                       "Top 10 ≤ 20 %, udvikler ≤ 2 %, bundtede ≤ 5 %"],
+            "Analyst": ["Køber ved score 78 eller mere", "Samme vægte som de andre"],
+            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 3 åbne",
+                         "Karantæne 6 t.", "Køber ikke, hvis kursen har flyttet sig over 2 % siden scanningen",
+                         "Regner med mindst 1,25 % i omkostning pr. side"],
+            "Risk": ["Stop −6 %", "Trailing fra +8 %, 6 % under toppen", "Pause i 12 t. efter 3 tab i træk"],
+        }), min_liq_usd=60_000, min_vol_1h_usd=100_000, max_change_1h_pct=50, max_top10_pct=20,
+        max_dev_pct=2, max_bundle_pct=5, max_entry_drift_pct=2.0, min_cost_per_side_pct=1.25,
+        pause_after_losses=3, pause_hours=12),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 
@@ -198,14 +226,35 @@ class StrategyBook:
                                 (self.r.key, c.mint))[0]["t"]
         return not (last and now - last < self.r.cooldown_minutes * 60)
 
-    def qualifies(self, c: Candidate, score: float, lp_pct: float | None) -> bool:
-        return (score >= self.r.min_score and (lp_pct is None or lp_pct >= self.r.min_lp_pct)
-                and c.liquidity_usd >= self.r.min_liq_usd)
+    def qualifies(self, c: Candidate, score: float, checks) -> bool:
+        ch = checks if isinstance(checks, dict) else {"lp_locked_pct": checks}
+        r = self.r
 
-    def consider(self, c: Candidate, score: float, lp_pct: float | None, decimals: int | None) -> BookPosition | None:
-        if not self.qualifies(c, score, lp_pct) or decimals is None:
+        def at_most(value, limit):
+            return limit is None or (value is not None and value <= limit)
+        lp = ch.get("lp_locked_pct")
+        return (score >= r.min_score and (lp is None or lp >= r.min_lp_pct)
+                and c.liquidity_usd >= r.min_liq_usd
+                and (r.min_vol_1h_usd is None or c.volume.get("h1", 0.0) >= r.min_vol_1h_usd)
+                and at_most(c.price_change.get("h1"), r.max_change_1h_pct)
+                and at_most(ch.get("top10_pct"), r.max_top10_pct)
+                and at_most(ch.get("dev_pct"), r.max_dev_pct)
+                and at_most(ch.get("bundle_pct"), r.max_bundle_pct))
+
+    def paused(self, now: float) -> bool:
+        """After N losses in a row, buy nothing for pause_hours from the last of them."""
+        n = self.r.pause_after_losses
+        if n <= 0:
+            return False
+        last = self.store.query("SELECT pnl_usd, closed_ts FROM strategy_positions WHERE strategy=? AND status='closed' "
+                                "ORDER BY closed_ts DESC LIMIT ?", (self.r.key, n))
+        return (len(last) == n and all((r["pnl_usd"] or 0) < 0 for r in last)
+                and now - last[0]["closed_ts"] < self.r.pause_hours * 3600)
+
+    def consider(self, c: Candidate, score: float, checks, decimals: int | None) -> BookPosition | None:
+        if not self.qualifies(c, score, checks) or decimals is None:
             return None
-        if not self.wants(c):
+        if not self.wants(c) or self.paused(time.time()):
             return None
         with self.lock:
             size = min(self.equity() * self.r.stake_pct / 100, self.cash - self.tx)
@@ -219,6 +268,13 @@ class StrategyBook:
         if qty <= 0 or spent <= 0:
             return None
         impact = impact or 0.0
+        mid = spent / qty / (1 + impact / 100)
+        if self.r.max_entry_drift_pct is not None and c.price_usd > 0 \
+                and abs(mid / c.price_usd - 1) * 100 > self.r.max_entry_drift_pct:
+            return None
+        if impact < self.r.min_cost_per_side_pct:    # charge at least the floor: fewer tokens for the same money
+            impact = self.r.min_cost_per_side_pct
+            qty = spent / (mid * (1 + impact / 100))
         entry = spent / qty
         now = time.time()
         p = BookPosition(
@@ -311,7 +367,7 @@ class StrategyLab:
         self.round = {b.r.key: {"window": sum(1 for c in [*real_window, *wide] if b.in_window(c)),
                                 "scored": [], "qualified": [], "bought": 0} for b in self.books}
 
-    def note(self, c: Candidate, score: float, lp: float | None, bought: list[str]) -> None:
+    def note(self, c: Candidate, score: float, lp, bought: list[str]) -> None:
         rnd = getattr(self, "round", None)
         if rnd is None:
             return
@@ -328,10 +384,10 @@ class StrategyLab:
         rnd, self.round = getattr(self, "round", None) or {}, None
         return rnd
 
-    def consider(self, c: Candidate, score: float, lp_pct: float | None, decimals: int | None) -> list[BookPosition]:
+    def consider(self, c: Candidate, score: float, checks, decimals: int | None) -> list[BookPosition]:
         out = []
         for b in self.books:
-            p = b.consider(c, score, lp_pct, decimals)
+            p = b.consider(c, score, checks, decimals)
             if p:
                 out.append(p)
         return out

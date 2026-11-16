@@ -193,7 +193,7 @@ class Desk:
                 self._kill(self._analyst_kill(card))
             # The shadow buy comes after the real one, so its quote never delays a real order.
             self._shadow(result.candidate, "scored", card.score, (result.jupiter or {}).get("decimals"))
-            cards.append((result.candidate, card.score, result.checks.get("lp_locked_pct"),
+            cards.append((result.candidate, card.score, result.checks,
                           (result.jupiter or {}).get("decimals")))
 
         for c in pumped:
@@ -251,7 +251,7 @@ class Desk:
             if isinstance(card, ScoreCard):
                 self._shadow(c, "wide_" + segment[c.mint], card.score, (result.jupiter or {}).get("decimals"))
                 if self.lab:
-                    self._lab(c, card.score, result.checks.get("lp_locked_pct"), (result.jupiter or {}).get("decimals"))
+                    self._lab(c, card.score, result.checks, (result.jupiter or {}).get("decimals"))
         if len(self.wide_recheck) > 5000:          # keep the dict small on a long run
             self.wide_recheck = {m: t for m, t in self.wide_recheck.items() if t > now}
 
@@ -283,7 +283,7 @@ class Desk:
                 self.log.event("strategy", "error", {"error": repr(e)}, mint=c.mint, symbol=c.symbol)
                 continue
             if isinstance(card, ScoreCard):
-                self._lab(c, card.score, metrics.get("lp_locked_pct"), (jup.get(c.mint) or {}).get("decimals"))
+                self._lab(c, card.score, metrics, (jup.get(c.mint) or {}).get("decimals"))
 
     def _shadow(self, c, kind: str, score: float | None, decimals: int | None) -> None:
         if c is None or not self.shadow.wants(c.mint):
