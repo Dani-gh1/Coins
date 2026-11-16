@@ -228,6 +228,16 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .stat { background: var(--raised); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 .stat .v { font-size: 20px; font-weight: 680; letter-spacing: -0.01em; margin-top: 4px; white-space: nowrap; }
 .stat .n { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+.progress-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.progress-head .big { font-size: 22px; font-weight: 680; font-variant-numeric: tabular-nums; }
+.checks { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 10px; }
+.check { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; background: var(--raised); border-radius: 12px; padding: 12px 14px; }
+.check .mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #fff; background: var(--muted); }
+.check.ok .mark { background: var(--good); }
+.check.bad .mark { background: var(--critical); }
+.check .t { font-weight: 600; }
+.check .v { font-weight: 680; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.check .why { grid-column: 2 / -1; color: var(--ink-2); font-size: 12.5px; }
 
 .feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .feed li { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px; font-size: 13px; align-items: baseline; }
@@ -695,6 +705,56 @@ function closedCard(state, limit) {
        componentMeters(t.components), dexLink(t)]))));
 }
 
+// ---- the test period: is the strategy good enough to consider real money? ----------
+const TEST_MIN = 30, TEST_GOAL = 50, MAX_DD_OK = -5;
+function testCard(state) {
+  const a = state.account, t = state.closed_trades, n = t.length, st = tradeStats(state);
+  const dd = state.equity_curve.length ? maxDrawdown(state.equity_curve) : 0;
+  const stopAt = state.rules ? -state.rules.risk.stop_loss_pct : -6;
+  const stops = t.filter((x) => x.exit_reason === "stop_loss");
+  const stopAvg = stops.length ? stops.reduce((sum, x) => sum + x.pnl_pct, 0) / stops.length : null;
+  const enough = n >= TEST_MIN;
+  const left = Math.max(0, TEST_GOAL - n);
+  const eta = st && st.perDay > 0 && left ? Math.ceil(left / st.perDay) : null;
+
+  // "Forventet pr. handel": what one trade gives on average = hit rate × avg win + loss rate × avg loss.
+  const p = n ? a.wins / n : 0;
+  const ev = st ? p * (st.avgWin || 0) + (1 - p) * (st.avgLoss || 0) : null;
+  const evWhy = st
+    ? "Du vinder " + share(p * 100, 0) + " af gangene med " + (st.avgWin == null ? "–" : pct(st.avgWin)) + " i snit og taber "
+      + share((1 - p) * 100, 0) + " af gangene med " + (st.avgLoss == null ? "–" : pct(st.avgLoss)) + " i snit. "
+      + "Lagt sammen giver én handel " + pct(ev) + " af indsatsen i gennemsnit. Plus betyder, at strategien tjener over tid – også selvom den taber tit."
+    : "Hvad én handel giver i gennemsnit, når både vundne og tabte er regnet med.";
+
+  const state3 = (good, needsData) => (needsData && !enough ? "wait" : good ? "ok" : "bad");
+  const checks = [
+    { s: enough ? "ok" : "wait", t: "Nok handler", v: num(n) + " af " + TEST_MIN,
+      why: enough ? "Nu er der nok data til, at tallene betyder noget." : "Under " + TEST_MIN + " handler kan held og uheld vende alt. Tallene nedenfor er foreløbige." },
+    { s: ev == null ? "wait" : state3(ev > 0, true), t: "Forventet pr. handel", v: ev == null ? "–" : pct(ev), why: evWhy },
+    { s: state3(a.return_pct > 0, true), t: "Kontoen i plus", v: pct(a.return_pct, 2), why: "Det samlede afkast siden start, inkl. åbne positioner." },
+    { s: state3(dd > MAX_DD_OK, true), t: "Største fald fra top", v: pct(dd, 2),
+      why: "Hvor meget kontoen højst er faldet fra sit højeste punkt. Med 1 % indsats pr. handel bør det holde sig over " + pct(MAX_DD_OK, 0) + "." },
+    { s: stopAvg == null ? "wait" : state3(stopAvg > stopAt - 2, true), t: "Salg ved stop", v: stopAvg == null ? "–" : pct(stopAvg),
+      why: "Stoppet står på " + pct(stopAt, 0) + ", men kursen kan nå at falde mere, før der sælges. "
+        + (stops.length ? "Gennemsnit af " + stops.length + " stop-salg. Mere end 2 point under stoppet er et faresignal for rigtig handel." : "Ingen stop-salg endnu.") },
+  ];
+  const mark = { ok: "✓", bad: "!", wait: "…" };
+  return card("Testperioden", "Mål: " + TEST_MIN + "–" + TEST_GOAL + " lukkede handler, før der tages stilling til rigtige penge.",
+    h("div", null,
+      h("div", { class: "progress-head" },
+        h("span", { class: "big", text: num(n) + " / " + TEST_GOAL + " handler" }),
+        h("span", { class: "note", text: !left ? "Målet er nået" : eta ? "ca. " + num(eta) + " dage til " + TEST_GOAL + " med det nuværende tempo" : "" })),
+      h("div", { class: "track", role: "img", "aria-label": num(n) + " af " + TEST_GOAL + " handler" },
+        h("div", { class: "fill", style: "width:" + Math.min(100, (n / TEST_GOAL) * 100) + "%" }),
+        h("div", { class: "limit", style: "left:" + (TEST_MIN / TEST_GOAL) * 100 + "%" })),
+      h("div", { class: "key", style: "margin-top:8px" }, h("i"), "minimum " + TEST_MIN),
+      h("ul", { class: "checks" }, checks.map((c) =>
+        h("li", { class: "check " + c.s },
+          h("span", { class: "mark", "aria-hidden": "true", text: mark[c.s] }),
+          h("span", { class: "t", text: c.t }), h("span", { class: "v", text: c.v }),
+          h("span", { class: "why", text: c.why }))))));
+}
+
 function statsCard(state) {
   const st = tradeStats(state);
   if (!st) return null;
@@ -965,7 +1025,7 @@ function render(state) {
   hideTip();
   const panel = (id, ...kids) => h("div", { class: "panel", id: "panel-" + id, "data-tab": id, role: "tabpanel", "aria-labelledby": "tab-" + id, hidden: id !== activeTab }, kids);
   main.replaceChildren(
-    panel("overblik", heroCard(state), kpis(state), chartCard(state), openCard(state),
+    panel("overblik", heroCard(state), kpis(state), testCard(state), chartCard(state), openCard(state),
       h("div", { class: "grid2" }, daysCard(state), activityCard(state, 7))),
     panel("handler", statsCard(state), openCard(state), closedCard(state, 50)),
     panel("marked", windowCard(state), h("div", { class: "grid2" }, funnelCard(state), killsCard(state)),
