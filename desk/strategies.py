@@ -22,6 +22,8 @@ virtual account, so they can be compared fairly from the same start.
                        0.2% impact, LP 100%, top 10 <= 15%, dev <= 1%, bundles <= 3%) and a 15% stake
   15 Bred max kræsen   strategy 14's rules in strategy 1's wide window ($100k-$20M, 10 min-7 days)
   16 Bred Kræsen+ 15 % strategy 13's rules in strategy 1's wide window
+  17 Mange små         many small trades: wide window, score >= 55, 0.5% stake, 10 open, 15 min cooldown,
+                       stop -4%, take-profit +5%, trailing +3%/2%, 30 min time stop
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -247,6 +249,17 @@ STRATEGIES = (
             "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Pause i 48 t. efter 2 tab i træk"],
         }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
         pause_after_losses=2, pause_hours=48),
+    StrategyRules(
+        "s17", "Mange små", 10, 168, 100_000, 20_000_000, 90, 55, 0.5, 1.0, 10, 15, 4, 3, 2,
+        _rules({
+            "Idé": ["Rigtig mange små handler: lave krav, lille indsats, hurtigt ude igen"],
+            "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio. (bredt vindue)"],
+            "Filter": ["Som strategi 2, men LP mindst 90 %"],
+            "Analyst": ["Køber ved score 55 eller mere"],
+            "Executor": ["0,5 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 10 åbne", "Karantæne 15 min."],
+            "Risk": ["Stop −4 %", "Sælger ved +5 % (gevinstmål)", "Trailing fra +3 %, 2 % under toppen",
+                     "Sælger efter 30 min., hvis intet andet er sket"],
+        }), take_profit_pct=5.0, max_hold_minutes=30),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 

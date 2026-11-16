@@ -22,7 +22,7 @@
   --page: #f9f9f7; --surface: #fcfcfb; --raised: #f3f3ef; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
   --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.09); --wash: rgba(11,11,11,0.045);
   --good: #0ca30c; --critical: #d03b3b;
-  --s1: #2a78d6; --s2: #d9730d; --s3: #12927a; --s4: #8a4fd6; --s5: #c2417a; --s6: #6b7a12; --s7: #0f6fa3; --s8: #b3261e; --s9: #6d5b3f; --s10: #0b7a3e; --s11: #a35c00; --s12: #5b3fa3; --s13: #9b1c5a; --s14: #1f4e5f; --s15: #4a6b1f; --s16: #8c3b2e;
+  --s1: #2a78d6; --s2: #d9730d; --s3: #12927a; --s4: #8a4fd6; --s5: #c2417a; --s6: #6b7a12; --s7: #0f6fa3; --s8: #b3261e; --s9: #6d5b3f; --s10: #0b7a3e; --s11: #a35c00; --s12: #5b3fa3; --s13: #9b1c5a; --s14: #1f4e5f; --s15: #4a6b1f; --s16: #8c3b2e; --s17: #3d3d8f;
   --shadow: 0 1px 2px rgba(11,11,11,0.04), 0 12px 32px rgba(11,11,11,0.05);
   --bar-bg: rgba(249,249,247,0.82);
 }
@@ -31,14 +31,14 @@
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --raised: #232322; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.09); --wash: rgba(255,255,255,0.06);
-    --s1: #4f95ea; --s2: #f0953a; --s3: #2bbfa2; --s4: #a77cf0; --s5: #e06a9e; --s6: #b5c444; --s7: #4fb3e8; --s8: #f2766b; --s9: #c9ad83; --s10: #4cc98a; --s11: #f5b04c; --s12: #b9a2f2; --s13: #f07fb5; --s14: #7fc4d9; --s15: #a9d36b; --s16: #e8907f; --shadow: none; --bar-bg: rgba(13,13,13,0.8);
+    --s1: #4f95ea; --s2: #f0953a; --s3: #2bbfa2; --s4: #a77cf0; --s5: #e06a9e; --s6: #b5c444; --s7: #4fb3e8; --s8: #f2766b; --s9: #c9ad83; --s10: #4cc98a; --s11: #f5b04c; --s12: #b9a2f2; --s13: #f07fb5; --s14: #7fc4d9; --s15: #a9d36b; --s16: #e8907f; --s17: #9a9af0; --shadow: none; --bar-bg: rgba(13,13,13,0.8);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19; --raised: #232322; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
   --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.09); --wash: rgba(255,255,255,0.06);
-  --s1: #4f95ea; --s2: #f0953a; --s3: #2bbfa2; --s4: #a77cf0; --s5: #e06a9e; --s6: #b5c444; --s7: #4fb3e8; --s8: #f2766b; --s9: #c9ad83; --s10: #4cc98a; --s11: #f5b04c; --s12: #b9a2f2; --s13: #f07fb5; --s14: #7fc4d9; --s15: #a9d36b; --s16: #e8907f; --shadow: none; --bar-bg: rgba(13,13,13,0.8);
+  --s1: #4f95ea; --s2: #f0953a; --s3: #2bbfa2; --s4: #a77cf0; --s5: #e06a9e; --s6: #b5c444; --s7: #4fb3e8; --s8: #f2766b; --s9: #c9ad83; --s10: #4cc98a; --s11: #f5b04c; --s12: #b9a2f2; --s13: #f07fb5; --s14: #7fc4d9; --s15: #a9d36b; --s16: #e8907f; --s17: #9a9af0; --shadow: none; --bar-bg: rgba(13,13,13,0.8);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -247,7 +247,7 @@ function speedCard(st) {
     h("div", { class: "speed" },
       ["Strategi", "Vindue", "Vurd.", "Opfyldt", "Købt", "Tid"].map((x, k) => h("div", { class: "h" + (k ? " r" : ""), text: x })),
       st.books.flatMap((b, i) => [
-        h("div", { class: "hc", style: "--c:" + color(i), text: (i + 1) + ". " + b.name.replace(" regler", "").replace("Bredt vindue", "Bredt").replace("Længere trailing", "Længere").replace("Dybe pools", "Dybe").replace("Hurtig gevinst", "Hurtig") }),
+        h("div", { class: "hc", style: "--c:" + color(i), text: (i + 1) + ". " + b.name.replace(" regler", "").replace("Bredt vindue", "Bredt").replace("Længere trailing", "Længere").replace("Dybe pools", "Dybe").replace("Hurtig gevinst", "Hurtig").replace("Mange små", "Små") }),
         ...rows.map(([, f]) => h("div", { class: "r", text: f(b) }))])),
     h("p", { class: "sub", style: "margin-top:10px", text: "Vindue: coins i vinduet pr. runde (gns.). Vurd.: forskellige coins, der fik en score. Opfyldt: havde høj nok score, LP og likviditet. Købt: handler taget. Tid: gennemsnitlig tid i en handel." }));
 }

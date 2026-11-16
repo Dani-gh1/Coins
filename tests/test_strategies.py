@@ -54,13 +54,13 @@ class LabTests(unittest.TestCase):
         lab = desk.lab
         c = candidate(mint="M71", symbol="M71")
         desk.src.jup.tokens_["M71"], desk.src.jup.price["M71"] = jup_token("M71"), 0.001
-        self.assertEqual([p.strategy for p in lab.consider(c, 71.0, 100.0, 6)], ["s3", "s8"])         # 70 <= score < 73
+        self.assertEqual([p.strategy for p in lab.consider(c, 71.0, 100.0, 6)], ["s3", "s8", "s17"])         # 70 <= score < 73
         c2 = candidate(mint="LP92", symbol="LP92")
         desk.src.jup.tokens_["LP92"], desk.src.jup.price["LP92"] = jup_token("LP92"), 0.001
-        self.assertEqual([p.strategy for p in lab.consider(c2, 80.0, 92.0, 6)], ["s3", "s8"])       # LP 90-95 %
+        self.assertEqual([p.strategy for p in lab.consider(c2, 80.0, 92.0, 6)], ["s3", "s8", "s17"])       # LP 90-95 %
         young = candidate(mint="YNG", symbol="YNG", age_h=0.25)
         desk.src.jup.tokens_["YNG"], desk.src.jup.price["YNG"] = jup_token("YNG"), 0.001
-        self.assertEqual([p.strategy for p in lab.consider(young, 80.0, 100.0, 6)], ["s1", "s8"])   # wide window only
+        self.assertEqual([p.strategy for p in lab.consider(young, 80.0, 100.0, 6)], ["s1", "s8", "s17"])   # wide window only
         self.close()
 
     def test_lp_90_to_95_coin_killed_by_the_real_filter_reaches_strategy_3(self):
@@ -83,7 +83,7 @@ class LabTests(unittest.TestCase):
         desk.shadow_tick()
         b = self.books()
         self.assertEqual((len(b["s1"].open), len(b["s2"].open), len(b["s3"].open)), (0, 0, 1))
-        closed = desk.store.query("SELECT strategy, exit_reason, pnl_usd FROM strategy_positions WHERE status='closed'")
+        closed = desk.store.query("SELECT strategy, exit_reason, pnl_usd FROM strategy_positions WHERE status='closed' AND strategy != 's17'")
         self.assertEqual({r["exit_reason"] for r in closed}, {"trailing_stop"})
         self.assertTrue(all(r["pnl_usd"] > 0 for r in closed))
         # s2 holds at most 3, s3 has no cap
@@ -100,7 +100,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15", "s16"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -382,3 +382,23 @@ class Strategy15And16Tests(unittest.TestCase):
                 if k in ("key", "name", "rules"):
                     continue
                 self.assertEqual(v, by["s1" if k in window else rules][k], (mix, k))
+
+
+class Strategy17Tests(unittest.TestCase):
+    def test_many_small_trades(self):
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=market())
+            src = desk.src
+            s17 = next(b for b in desk.lab.books if b.r.key == "s17")
+            for i in range(12):
+                m = f"M{i}"
+                src.jup.tokens_[m], src.jup.price[m] = jup_token(m), 0.001
+                s17.consider(candidate(mint=m, symbol=m), 56.0, 92.0, 6)
+            self.assertEqual(len(s17.open), 10)                              # at most 10 open
+            p = next(iter(s17.open.values()))
+            self.assertAlmostEqual(p.cost_usd / 10_000 * 100, 0.5, delta=0.01)
+            desk.lab.tick({p.mint: 0.00106})                                # +6%: take profit at +5%
+            r = desk.store.query("SELECT exit_reason FROM strategy_positions WHERE strategy='s17' AND id=?", (p.id,))[0]
+            self.assertIn(r["exit_reason"], ("take_profit", "trailing_stop"))
+            desk.log.close()
+            desk.store.close()
