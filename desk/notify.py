@@ -16,7 +16,8 @@ import queue
 import threading
 import urllib.request
 
-REASONS = {"stop_loss": "Stop loss", "trailing_stop": "Trailing stop", "stale_price": "Ingen kurs i 5 min."}
+REASONS = {"stop_loss": "Stop loss", "trailing_stop": "Trailing stop", "stale_price": "Ingen kurs i 5 min.",
+           "take_profit": "Gevinstmål nået", "time_stop": "Tidsgrænse nået"}
 
 
 def _describe(e: Exception) -> str:

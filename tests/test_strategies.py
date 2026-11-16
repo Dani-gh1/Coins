@@ -54,13 +54,13 @@ class LabTests(unittest.TestCase):
         lab = desk.lab
         c = candidate(mint="M71", symbol="M71")
         desk.src.jup.tokens_["M71"], desk.src.jup.price["M71"] = jup_token("M71"), 0.001
-        self.assertEqual([p.strategy for p in lab.consider(c, 71.0, 100.0, 6)], ["s3"])         # 70 <= score < 73
+        self.assertEqual([p.strategy for p in lab.consider(c, 71.0, 100.0, 6)], ["s3", "s8"])         # 70 <= score < 73
         c2 = candidate(mint="LP92", symbol="LP92")
         desk.src.jup.tokens_["LP92"], desk.src.jup.price["LP92"] = jup_token("LP92"), 0.001
-        self.assertEqual([p.strategy for p in lab.consider(c2, 80.0, 92.0, 6)], ["s3"])       # LP 90-95 %
+        self.assertEqual([p.strategy for p in lab.consider(c2, 80.0, 92.0, 6)], ["s3", "s8"])       # LP 90-95 %
         young = candidate(mint="YNG", symbol="YNG", age_h=0.25)
         desk.src.jup.tokens_["YNG"], desk.src.jup.price["YNG"] = jup_token("YNG"), 0.001
-        self.assertEqual([p.strategy for p in lab.consider(young, 80.0, 100.0, 6)], ["s1"])   # wide window only
+        self.assertEqual([p.strategy for p in lab.consider(young, 80.0, 100.0, 6)], ["s1", "s8"])   # wide window only
         self.close()
 
     def test_lp_90_to_95_coin_killed_by_the_real_filter_reaches_strategy_3(self):
@@ -100,7 +100,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -263,5 +263,35 @@ class Strategy7Tests(unittest.TestCase):
             self.assertIsNone(b.consider(self.coin(desk, "NEW"), 90.0, ok, 6))
             self.assertFalse(b.paused(time.time() + 12 * 3600 + 1))
             self.assertEqual(b.r.cooldown_minutes, 360)
+            desk.log.close()
+            desk.store.close()
+
+
+class Strategy8And9Tests(unittest.TestCase):
+    def test_aggressive_stake_and_quick_profit_exits(self):
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=market())
+            desk.scan_cycle()
+            b = {x.r.key: x for x in desk.lab.books}
+            s8 = next(iter(b["s8"].open.values()))
+            self.assertAlmostEqual(s8.cost_usd / 10_000 * 100, 10.0, delta=0.05)
+            desk.src.jup.price["GOOD"] = 0.00114          # +14%: s9 takes its profit, s2 keeps trailing
+            desk.shadow_tick()
+            r = desk.store.query("SELECT exit_reason, pnl_usd FROM strategy_positions WHERE strategy='s9'")[0]
+            self.assertEqual(r["exit_reason"], "take_profit")
+            self.assertGreater(r["pnl_usd"], 0)
+            self.assertEqual(len(b["s2"].open), 1)
+            desk.log.close()
+            desk.store.close()
+
+    def test_time_stop_after_two_hours(self):
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=market())
+            desk.scan_cycle()
+            s9 = next(x for x in desk.lab.books if x.r.key == "s9")
+            next(iter(s9.open.values())).opened_ts -= 2 * 3600 + 1
+            desk.shadow_tick()
+            r = desk.store.query("SELECT exit_reason FROM strategy_positions WHERE strategy='s9'")[0]
+            self.assertEqual(r["exit_reason"], "time_stop")
             desk.log.close()
             desk.store.close()

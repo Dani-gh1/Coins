@@ -10,6 +10,9 @@ virtual account, so they can be compared fairly from the same start.
   6  Kræsen            score >= 76, $100k+ liquidity, at most 0.5% impact, trailing from +15% / 10%
   7  Profil B          the user's own profile: 1-24 h, $300k-$10M, stricter filters, score >= 78,
                        6 h cooldown, 2% entry drift cap, >= 1.25% cost per side, 12 h pause after 3 losses
+  8  Aggressiv         aims at 1% a day: wide window, score >= 65, 10% stake, 6 open, 30 min cooldown,
+                       stop -8%, trailing from +20% / 12%
+  9  Hurtig gevinst    strategy 2 plus a +12% take-profit and a 2-hour time stop
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -62,6 +65,8 @@ class StrategyRules:
     min_cost_per_side_pct: float = 0.0        # costs per side are at least this (floor on the real impact)
     pause_after_losses: int = 0               # after this many losses in a row ...
     pause_hours: float = 0.0                  # ... buy nothing for this long (0 = never pause)
+    take_profit_pct: float | None = None      # sell when the mark is this far above the entry
+    max_hold_minutes: float | None = None     # sell after this long, whatever the price
 
 
 def _rules(r: dict) -> tuple:
@@ -137,6 +142,23 @@ STRATEGIES = (
         }), min_liq_usd=60_000, min_vol_1h_usd=100_000, max_change_1h_pct=50, max_top10_pct=20,
         max_dev_pct=2, max_bundle_pct=5, max_entry_drift_pct=2.0, min_cost_per_side_pct=1.25,
         pause_after_losses=3, pause_hours=12),
+    StrategyRules(
+        "s8", "Aggressiv", 10, 168, 100_000, 20_000_000, 90, 65, 10.0, 2.0, 6, 30, 8, 20, 12,
+        _rules({
+            "Mål": ["1 % afkast om dagen: mange handler, stor indsats, vinderne løber langt"],
+            "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio. (bredt vindue)"],
+            "Filter": ["Som strategi 2, men LP mindst 90 %"],
+            "Analyst": ["Køber ved score 65 eller mere"],
+            "Executor": ["10 % af kontoen pr. handel", "Prisvirkning højst 2,0 %", "Højst 6 åbne", "Karantæne 30 min."],
+            "Risk": ["Stop −8 %", "Trailing fra +20 %, 12 % under toppen"],
+        })),
+    StrategyRules(
+        "s9", "Hurtig gevinst", 30, 72, 300_000, 20_000_000, 95, 73, 1.0, 1.0, 3, 120, 6, 8, 6,
+        _rules({
+            "Alt andet": ["Præcis som strategi 2 (vindue, filtre, score 73, 1 %, højst 3 åbne)"],
+            "Risk": ["Stop −6 %, trailing fra +8 %, 6 % under toppen",
+                     "Sælger ved +12 % (gevinstmål)", "Sælger efter 2 timer, hvis intet andet er sket"],
+        }), take_profit_pct=12.0, max_hold_minutes=120),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 
@@ -311,6 +333,10 @@ class StrategyBook:
             p.last_price, p.last_price_ts = mark, now
             if d.exit:
                 closed.append(self._close(p, mark, d.exit.reason, now))
+            elif self.r.take_profit_pct is not None and mark >= p.entry_price * (1 + self.r.take_profit_pct / 100):
+                closed.append(self._close(p, mark, "take_profit", now))
+            elif self.r.max_hold_minutes is not None and now - p.opened_ts >= self.r.max_hold_minutes * 60:
+                closed.append(self._close(p, mark, "time_stop", now))
             else:
                 with self.lock:
                     self._save(p)
