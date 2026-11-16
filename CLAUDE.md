@@ -28,7 +28,7 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
 - `python3 -m desk run --dashboard 8787` (brug `python3`, ikke `python`, på brugerens Mac).
 - Dashboardet ligger på `http://127.0.0.1:8787` (dansk UI, 4 faner).
 - Papirbogen gemmes portabelt i `runs/state.json` og gendannes, når databasen er tom.
-- Testene køres med `python3 -m unittest discover -s tests` (81 tests).
+- Testene køres med `python3 -m unittest discover -s tests` (82 tests).
 - **Desken kører 24/7 på brugerens Oracle Cloud-server** (Ubuntu 24.04, offentlig IP 89.168.96.169,
   bruger `ubuntu`, mappe `~/Coins`) som systemd-servicen `desk` (`Restart=always`). Brugeren logger
   ind fra Macen med `ssh -i ~/.ssh/oracle ubuntu@89.168.96.169`. Opdatering på serveren:
@@ -41,10 +41,10 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
   den ligger på serveren. Serverens nye handler ligger i dens database, ikke på GitHub.
 - Notifikationer til telefonen via ntfy-appen (`desk/notify.py`): miljøvariablen `NTFY_TOPIC` sættes
   med `sudo systemctl edit desk` ligesom `JUPITER_API_KEY`. Sendes kun ved køb, salg, stop og nedbrud (brugerens ønske),
-  og ved køb og salg i hver af de tre strategier (S1–S3).
+  og ved køb og salg i hver af strategierne (S1–S4).
 - **Strategitest (midlertidig, fra 2026-11-16):** `desk/strategies.py` kører tre regelsæt på virtuelle
   konti side om side (1 bredt vindue, 2 nuværende regler, 3 gamle regler: score ≥ 70, 8 %, LP 90 %,
-  trail +12 %, intet loft på prisvirkning/positioner). Dashboardet viser KUN strategitesten, fordi
+  trail +12 %, intet loft på prisvirkning/positioner, 4 som 2 men trailing fra +15 % og 10 % under toppen). Dashboardet viser KUN strategitesten, fordi
   `dashboard_view = "strategies"` i `desk/config.py`. Når brugeren siger til, skiftes det tilbage
   ved at sætte `dashboard_view = "full"` (det normale dashboard er urørt i `dashboard.html` og kan
   altid ses på `/full`). Spørg, om strategitesten (`strategy_test`) også skal slås fra.

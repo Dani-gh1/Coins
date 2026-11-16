@@ -5,6 +5,7 @@ virtual account, so they can be compared fairly from the same start.
   2  Nuværende regler  the rules the real paper desk runs with
   3  Gamle regler      the rules from before 15 Nov: score >= 70, 8% per trade, no impact
                        cap, no position cap, LP >= 90%, trailing stop from +12%
+  4  Længere trailing  strategy 2, but the trailing stop arms at +15% and trails 10% under the high
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -81,6 +82,12 @@ STRATEGIES = (
             "Executor": ["8 % af kontoen pr. handel", "Intet loft på prisvirkning", "Intet loft på antal åbne",
                          "Karantæne 2 t."],
             "Risk": ["Stop −6 %", "Trailing fra +12 %, 6 % under toppen"],
+        })),
+    StrategyRules(
+        "s4", "Længere trailing", 30, 72, 300_000, 20_000_000, 95, 73, 1.0, 1.0, 3, 120, 6, 15, 10,
+        _rules({
+            "Alt andet": ["Præcis som strategi 2 (vindue, filtre, score 73, 1 %, højst 3 åbne)"],
+            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Giver vinderne mere plads"],
         })),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)

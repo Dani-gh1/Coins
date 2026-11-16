@@ -102,7 +102,7 @@ python3 -m desk once                           # a single scan cycle
 python3 -m desk report --run-id night1         # P&L, trades, kill table, top scores
 python3 -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
 python3 -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
-python3 -m unittest discover -s tests -t .     # 81 offline tests
+python3 -m unittest discover -s tests -t .     # 82 offline tests
 ```
 
 ### Dashboard

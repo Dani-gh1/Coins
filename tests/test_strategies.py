@@ -99,7 +99,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -135,5 +135,26 @@ class SpeedTests(unittest.TestCase):
             self.assertEqual((b["s1"]["window_avg"], b["s2"]["window_avg"], b["s3"]["window_avg"]), (2, 1, 1))
             self.assertEqual((b["s1"]["scored"], b["s2"]["scored"]), (2, 1))
             self.assertEqual((b["s1"]["bought"], b["s2"]["bought"], b["s3"]["bought"]), (2, 1, 1))
+            desk.log.close()
+            desk.store.close()
+
+
+class Strategy4Tests(unittest.TestCase):
+    def test_longer_trailing_gives_winners_more_room(self):
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=market())
+            desk.scan_cycle()
+            b = {x.r.key: x for x in desk.lab.books}
+            px = desk.src.jup.price
+            px["GOOD"] = 0.00118            # +18%: s2 trails 6% under, s4 10% under
+            desk.shadow_tick()
+            px["GOOD"] = 0.00109            # -7.6% from the high: s2 is out, s4 still holds
+            desk.shadow_tick()
+            self.assertEqual((len(b["s2"].open), len(b["s4"].open)), (0, 1))
+            px["GOOD"] = 0.00104            # -11.9% from the high: now s4 sells too, still in profit
+            desk.shadow_tick()
+            r = desk.store.query("SELECT exit_reason, pnl_usd FROM strategy_positions WHERE strategy='s4'")[0]
+            self.assertEqual(r["exit_reason"], "trailing_stop")
+            self.assertGreater(r["pnl_usd"], 0)
             desk.log.close()
             desk.store.close()
