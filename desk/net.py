@@ -19,11 +19,12 @@ USER_AGENT = "memecoin-desk/0.1"
 # less than the API's limit, since the API counts them together.
 #   Jupiter without an API key: 0.5 requests/s = 30/min (dev.jup.ag "Rate Limits").
 #   DexScreener: 300/min on the pairs/tokens endpoints, 60/min on profiles/boosts.
-#   GeckoTerminal: the public limit is not stated clearly; 24/min drew regular 429s.
+#   GeckoTerminal: the public limit is not stated clearly. At 24/min the server got 1142
+#   429s against 723 answers in 2.5 h, so it is kept well under 10/min.
 #   With a free Jupiter API key (env JUPITER_API_KEY) the desk uses api.jup.ag at 60/min.
 HOST_RPM = {
     "api.dexscreener.com": 180,
-    "api.geckoterminal.com": 18,
+    "api.geckoterminal.com": 8,
     "api.rugcheck.xyz": 40,
     "lite-api.jup.ag": 18,
     "api.jup.ag": 36,

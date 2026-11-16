@@ -139,3 +139,28 @@ class PruneAndConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SlowFeedTests(unittest.TestCase):
+    def test_jupiter_and_gecko_lists_are_reused_between_refreshes(self):
+        from desk.agents.scout import Scout
+        from desk.config import ScoutConfig
+        src = sources()
+        calls = {"jup": 0, "gecko": 0}
+
+        def jup():
+            calls["jup"] += 1
+            return {"GOOD": "jupiter:test"}
+
+        def gecko():
+            calls["gecko"] += 1
+            return {"GOOD": "geckoterminal:test"}, {"POOL": "GOOD"}
+        src.jup.discovery_mints, src.gecko.discovery = jup, gecko
+        scout = Scout(ScoutConfig(), src)
+        for _ in range(3):
+            rep = scout.scan()
+        self.assertEqual(calls, {"jup": 1, "gecko": 1})
+        self.assertEqual(rep.trending_pools, ["POOL"])
+        scout._slow_at -= 121
+        scout.scan()
+        self.assertEqual(calls, {"jup": 2, "gecko": 2})

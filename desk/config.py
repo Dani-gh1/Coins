@@ -25,6 +25,10 @@ class ScoutConfig:
     # the other feeds only widen the net of mint addresses fed into it.
     use_jupiter_feeds: bool = True
     use_geckoterminal_feeds: bool = True
+    # The Jupiter and GeckoTerminal feeds are re-read at most this often. Coins stay in the
+    # window for 30 min - 72 h, so a 2-minute-old list loses next to nothing, while reading
+    # them every cycle drew more 429s from GeckoTerminal than answers (and slowed every cycle).
+    slow_feeds_refresh_seconds: float = 120.0
 
 
 @dataclass
@@ -93,7 +97,7 @@ class DeskConfig:
     scan_interval_seconds: float = 20.0
     data_dir: str = "runs"
     smart_wallet_seed_file: str = "data/smart_wallets.txt"
-    learner_pools_per_cycle: int = 2
+    learner_pools_per_cycle: int = 1
     # When the current rules took effect (1% stake, 1% impact cap, 3 positions, 1 s checks).
     # The dashboard's test period only counts trades opened from here on; earlier trades
     # were made under other rules (8% stake, no impact cap) and would skew the verdict.

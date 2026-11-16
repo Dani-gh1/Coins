@@ -76,6 +76,9 @@ class Scout:
         # Trending pools (pool -> mint) from the last scan, used by the smart-wallet learner.
         self.pool_mint: dict[str, str] = {}
         self.last_trending: list[str] = []
+        # Jupiter and GeckoTerminal discovery, cached between refreshes (see slow_feeds_refresh_seconds).
+        self._slow_feeds: dict[str, str] = {}
+        self._slow_at: float | None = None
 
     def scan(self) -> ScoutReport:
         feeds: dict[str, set[str]] = {}
@@ -85,14 +88,20 @@ class Scout:
                 feeds.setdefault(mint, set()).add(feed)
 
         add(self.src.dex.discovery_mints())
-        if self.cfg.use_jupiter_feeds:
-            add(self.src.jup.discovery_mints())
+        now = time.time()
         trending: dict[str, str] = {}
-        if self.cfg.use_geckoterminal_feeds:
-            gt_mints, trending = self.src.gecko.discovery()
-            add(gt_mints)
-            self.pool_mint.update(trending)
-            self.last_trending = list(trending)
+        if self._slow_at is None or now - self._slow_at >= self.cfg.slow_feeds_refresh_seconds:
+            slow: dict[str, str] = {}
+            if self.cfg.use_jupiter_feeds:
+                slow.update(self.src.jup.discovery_mints())
+            if self.cfg.use_geckoterminal_feeds:
+                gt_mints, trending = self.src.gecko.discovery()
+                for mint, feed in gt_mints.items():
+                    slow.setdefault(mint, feed)
+                self.pool_mint.update(trending)
+                self.last_trending = list(trending)
+            self._slow_feeds, self._slow_at = slow, now
+        add(self._slow_feeds)
 
         for quote in self.cfg.accepted_quote_mints:
             feeds.pop(quote, None)
@@ -119,4 +128,4 @@ class Scout:
             if ok:
                 out.append(to_candidate(pair, age_h, mcap, tuple(sorted(feeds[mint]))))
         out.sort(key=lambda c: c.volume.get("h1", 0.0), reverse=True)
-        return ScoutReport(out, list(trending), feed_counts, len(feeds), len(pairs))
+        return ScoutReport(out, list(self.last_trending), feed_counts, len(feeds), len(pairs))
