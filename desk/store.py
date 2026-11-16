@@ -55,6 +55,19 @@ CREATE TABLE IF NOT EXISTS shadow_positions (
     exit_reason TEXT, pnl_pct REAL
 );
 CREATE INDEX IF NOT EXISTS shadow_mint ON shadow_positions(mint, closed_ts);
+CREATE TABLE IF NOT EXISTS strategy_account (
+    strategy TEXT PRIMARY KEY, start_ts REAL, start_equity REAL, cash REAL
+);
+CREATE TABLE IF NOT EXISTS strategy_positions (
+    id TEXT PRIMARY KEY, strategy TEXT NOT NULL, mint TEXT NOT NULL, symbol TEXT, pair_address TEXT,
+    score REAL, opened_ts REAL, qty REAL, cost_usd REAL, entry_price REAL, entry_impact_pct REAL,
+    stop_price REAL, high_price REAL, trail_active INTEGER, trail_trigger_price REAL,
+    trail_distance_pct REAL, last_price REAL, last_price_ts REAL, status TEXT, closed_ts REAL,
+    exit_price REAL, exit_reason TEXT, proceeds_usd REAL, pnl_usd REAL
+);
+CREATE INDEX IF NOT EXISTS strategy_pos_mint ON strategy_positions(strategy, mint, closed_ts);
+CREATE TABLE IF NOT EXISTS strategy_equity (ts REAL NOT NULL, strategy TEXT NOT NULL, equity REAL);
+CREATE INDEX IF NOT EXISTS strategy_equity_ts ON strategy_equity(strategy, ts);
 CREATE TABLE IF NOT EXISTS smart_wallets (
     wallet TEXT PRIMARY KEY, source TEXT, wins INTEGER, losses INTEGER,
     realized_usd REAL, added_ts REAL, updated_ts REAL

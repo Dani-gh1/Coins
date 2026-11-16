@@ -121,6 +121,11 @@ class DeskConfig:
     # The dashboard's test period only counts trades opened from here on; earlier trades
     # were made under other rules (8% stake, no impact cap) and would skew the verdict.
     rules_since: str = "2026-11-15T15:10:00Z"
+    # Strategy test (desk/strategies.py): three rule sets on virtual accounts, side by side.
+    strategy_test: bool = True
+    # Which page the dashboard serves: "strategies" (temporary: only the strategy test) or
+    # "full" (the normal dashboard). The user asked for the strategy page until further notice.
+    dashboard_view: str = "strategies"
     scout: ScoutConfig = field(default_factory=ScoutConfig)
     filter: FilterConfig = field(default_factory=FilterConfig)
     analyst: AnalystConfig = field(default_factory=AnalystConfig)

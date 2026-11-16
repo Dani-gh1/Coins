@@ -131,7 +131,7 @@ class WideWindowTests(unittest.TestCase):
             self.assertEqual(kinds, {"GOOD": "scored", "YOUNG": "wide_young", "CHEAP": "wide_low_mcap",
                                      "OLD": "wide_old"})
             # the real journal only knows the real window
-            for table, where in (("kills", ""), ("scores", ""), ("events", " WHERE agent != 'shadow'")):
+            for table, where in (("kills", ""), ("scores", ""), ("events", " WHERE agent NOT IN ('shadow', 'strategy')")):
                 seen = {r["mint"] for r in desk.store.query(f"SELECT DISTINCT mint FROM {table}{where}") if r["mint"]}
                 self.assertFalse(seen & set(names), table)
             self.assertEqual({p.mint for p in desk.executor.open_positions()}, {"GOOD"})

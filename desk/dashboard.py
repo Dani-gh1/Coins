@@ -19,6 +19,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 PAGE = Path(__file__).with_name("dashboard.html")
+# Temporary page with only the strategy test (config: dashboard_view = "strategies").
+STRATEGY_PAGE = Path(__file__).with_name("strategies.html")
 STATIC_DIR = Path(__file__).with_name("static")
 # Home-screen icon and web-app manifest, so the page can be added to a phone as an app.
 STATIC = {
@@ -310,6 +312,7 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
     }
 
     return {
+        "strategies": _strategies(q, now, account("starting_equity", 0.0), equity),
         "shadow": _shadow(q, now, min_score),
         "speed": _speed(q, now),
         "runs": _runs(q, now),
@@ -341,6 +344,65 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
         "top_scores": top_scores,
         "activity": activity,
     }
+
+
+def _strategies(q, now: float, real_start: float, real_equity: float) -> dict | None:
+    """The strategy test (desk/strategies.py): each book's account, trades and equity curve.
+    Everything in percent; the books start at the same moment, so they compare directly."""
+    from .strategies import STRATEGIES
+    if not q("SELECT 1 FROM sqlite_master WHERE type='table' AND name='strategy_account'"):
+        return None
+    accounts = {r["strategy"]: dict(r) for r in q("SELECT * FROM strategy_account")}
+    if not accounts:
+        return {"books": [], "start_ts": None}
+    out = []
+    for st in STRATEGIES:
+        acc = accounts.get(st.key)
+        if not acc:
+            continue
+        start = acc["start_equity"] or 1.0
+        rows = [dict(r) for r in q("SELECT * FROM strategy_positions WHERE strategy=? ORDER BY opened_ts DESC", (st.key,))]
+        open_ = [r for r in rows if r["status"] == "open"]
+        closed = [r for r in rows if r["status"] == "closed"]
+        equity = acc["cash"] + sum(r["qty"] * r["last_price"] for r in open_)
+        res = [r["pnl_usd"] / r["cost_usd"] * 100 for r in closed if r["cost_usd"]]
+        wins = sum(1 for x in res if x > 0)
+        curve_rows = q("SELECT ts, equity FROM strategy_equity WHERE strategy=? ORDER BY ts", (st.key,))
+        curve = [(r["ts"], (r["equity"] / start - 1) * 100) for r in curve_rows]
+        if len(curve) > 400:
+            step = len(curve) / 399
+            curve = [curve[int(i * step)] for i in range(399)] + [curve[-1]]
+        curve.append((now, (equity / start - 1) * 100))
+        peak, dd = -1e9, 0.0
+        for _, v in curve:
+            eq = 1 + v / 100
+            peak = max(peak, eq)
+            dd = min(dd, (eq / peak - 1) * 100)
+        out.append({
+            "key": st.key, "name": st.name, "rules": [[k, list(v)] for k, v in st.rules],
+            "start_ts": acc["start_ts"], "return_pct": (equity / start - 1) * 100,
+            "invested_pct": sum(r["qty"] * r["last_price"] for r in open_) / equity * 100 if equity else 0.0,
+            "closed": len(closed), "wins": wins, "win_rate": wins / len(res) * 100 if res else None,
+            "avg_pct": sum(res) / len(res) if res else None,
+            "best_pct": max(res) if res else None, "worst_pct": min(res) if res else None,
+            "max_drawdown_pct": dd,
+            "open": [{"symbol": r["symbol"], "mint": r["mint"], "score": r["score"], "opened_ts": r["opened_ts"],
+                      "stake_pct": r["cost_usd"] / start * 100,
+                      "unrealized_pct": (r["qty"] * r["last_price"] / r["cost_usd"] - 1) * 100 if r["cost_usd"] else 0.0,
+                      "trail_active": bool(r["trail_active"])} for r in open_],
+            "recent": [{"symbol": r["symbol"], "mint": r["mint"], "score": r["score"], "closed_ts": r["closed_ts"],
+                        "pnl_pct": r["pnl_usd"] / r["cost_usd"] * 100 if r["cost_usd"] else 0.0,
+                        "reason": r["exit_reason"]} for r in closed[:8]],
+            "curve": [[round(t, 1), round(v, 3)] for t, v in curve],
+        })
+    start_ts = min(b["start_ts"] for b in out) if out else None
+    real = None
+    if start_ts and real_start:
+        at = q("SELECT json_extract(payload, '$.equity') AS eq FROM events WHERE kind='cycle' AND ts >= ? "
+               "AND run_id IS NOT 'restored' ORDER BY ts LIMIT 1", (start_ts,))
+        if at and at[0]["eq"]:
+            real = (real_equity / at[0]["eq"] - 1) * 100
+    return {"books": out, "start_ts": start_ts, "real_since_pct": real}
 
 
 SHADOW_THRESHOLDS = (0, 60, 65, 70, 73, 80)
@@ -469,6 +531,10 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         try:
             if path in ("/", "/index.html"):
+                rules = self.server.rules or {}                              # type: ignore[attr-defined]
+                page = STRATEGY_PAGE if rules.get("dashboard_view") == "strategies" else PAGE
+                self._send(200, "text/html; charset=utf-8", page.read_bytes())
+            elif path == "/full":                                            # the normal dashboard, always
                 self._send(200, "text/html; charset=utf-8", PAGE.read_bytes())
             elif path in STATIC:
                 name, ctype = STATIC[path]

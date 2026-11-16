@@ -27,9 +27,10 @@ from .agents.risk import Risk
 from .agents.scout import Scout
 from .config import DeskConfig
 from .dashboard import equity_points
-from .messages import Deferral, ExitSignal, Kill, ScoreCard
+from .messages import Deferral, ExitSignal, FilterPass, Kill, ScoreCard
 from .shadow import ShadowBook, shadow_line, shadow_payload
 from .smart_wallets import SmartWalletBook
+from .strategies import MIN_LP, StrategyLab
 from .net import JUPITER_API_KEY, RISK_RPM, SHADOW_RPM, Http, jupiter_key_rejected
 from .notify import REASONS, Notifier, pct
 from .sources import Sources
@@ -61,6 +62,10 @@ class Desk:
         self.shadow_src = sources or Sources(Http(timeout=6.0, retries=1, rpm=SHADOW_RPM))
         self.shadow = ShadowBook(cfg.shadow, cfg.risk, self.store, self.executor,
                                  cfg.executor.reentry_cooldown_minutes, cfg.executor.tx_cost_usd)
+        # Strategy test (desk/strategies.py): three rule sets on virtual accounts, fed from this pipeline.
+        self.lab = StrategyLab(self.store, lambda mint, usd, cap: self.executor._fit_size(mint, usd, cap=cap),
+                               cfg.executor.tx_cost_usd, cfg.executor.min_order_usd, self.risk,
+                               cfg.risk.stale_price_seconds) if cfg.strategy_test else None
         self.notify = notifier or Notifier.from_env()
         self.notify.on_error = lambda err: self.log.event(
             "notify", "error", {"error": err}, line=f"notification failed: {err}")
@@ -144,6 +149,8 @@ class Desk:
                  "deferred": 0, "entered": 0}
         by_mint = {c.mint: c for c in fresh}
         pumped = []                     # shadowed after the loop, so no shadow quote delays a real buy
+        lp_only = []                    # killed only for LP 90-95%: still a candidate for a strategy book
+        cards = []                      # (candidate, score, lp, decimals) for the strategy books
         for result in self.filter.evaluate(fresh):
             if isinstance(result, Kill):
                 self._kill(result)
@@ -151,6 +158,10 @@ class Desk:
                 if (self.cfg.shadow.include_pumped and result.stage == "filter" and result.reasons
                         and all(r.startswith("already_pumped") for r in result.reasons)):
                     pumped.append(by_mint.get(result.mint))
+                lp = (result.metrics or {}).get("lp_locked_pct")
+                if (self.lab and result.reasons and all(r.startswith("lp_unlocked") for r in result.reasons)
+                        and lp is not None and lp >= MIN_LP):
+                    lp_only.append((by_mint.get(result.mint), result.metrics))
                 continue
             stats["passed_filter"] += 1
             self.log.filter_pass(result)
@@ -177,9 +188,15 @@ class Desk:
                 self._kill(self._analyst_kill(card))
             # The shadow buy comes after the real one, so its quote never delays a real order.
             self._shadow(result.candidate, "scored", card.score, (result.jupiter or {}).get("decimals"))
+            cards.append((result.candidate, card.score, result.checks.get("lp_locked_pct"),
+                          (result.jupiter or {}).get("decimals")))
 
         for c in pumped:
             self._shadow(c, "pumped", None, None)
+        if self.lab:
+            for c, score, lp, decimals in cards:
+                self._lab(c, score, lp, decimals)
+            self._lab_lp_only(lp_only)
         self._wide(rep.wide or [], stats)
         self._learn()
         if jupiter_key_rejected() and not self._jup_key_reported:
@@ -204,7 +221,8 @@ class Desk:
         now = time.time()
         todo = [(c, seg) for c, seg in wide
                 if self.wide_recheck.get(c.mint, 0) <= now and not self.executor.holds(c.mint)
-                and self.shadow.wants(c.mint, now)][: self.cfg.shadow.wide_per_cycle]
+                and (self.shadow.wants(c.mint, now) or (self.lab and self.lab.wants(c)))
+                ][: self.cfg.shadow.wide_per_cycle]
         stats["wide_seen"], stats["wide_evaluated"] = len(wide), len(todo)
         if not todo:
             return
@@ -227,8 +245,37 @@ class Desk:
                 continue
             if isinstance(card, ScoreCard):
                 self._shadow(c, "wide_" + segment[c.mint], card.score, (result.jupiter or {}).get("decimals"))
+                if self.lab:
+                    self._lab(c, card.score, result.checks.get("lp_locked_pct"), (result.jupiter or {}).get("decimals"))
         if len(self.wide_recheck) > 5000:          # keep the dict small on a long run
             self.wide_recheck = {m: t for m, t in self.wide_recheck.items() if t > now}
+
+    def _lab(self, c, score: float, lp, decimals) -> None:
+        try:
+            for p in self.lab.consider(c, score, lp, decimals):
+                self.log.event("strategy", "strategy_open", {"strategy": p.strategy, "position_id": p.id, "score": score,
+                                                              "impact_pct": p.entry_impact_pct},
+                               mint=p.mint, symbol=p.symbol,
+                               line=f"{p.strategy.upper()} BUY  {p.symbol:<10} score {score:.0f} "
+                                    f"impact {p.entry_impact_pct:.2f}%")
+        except Exception as e:  # the strategy test must never break the scan
+            self.log.event("strategy", "error", {"error": repr(e)}, mint=c.mint, symbol=c.symbol)
+
+    def _lab_lp_only(self, killed) -> None:
+        """Coins the real Filter killed only because 90-95% of the LP is locked: the old rules
+        (strategy 3) accept those, so score them for the books. Rare, so the extra calls are few."""
+        killed = [(c, m) for c, m in killed if c and self.lab.wants(c)]
+        if not killed:
+            return
+        jup = self.src.jup.tokens([c.mint for c, _ in killed])
+        for c, metrics in killed:
+            try:
+                card = self.analyst.evaluate(FilterPass(candidate=c, checks=metrics, jupiter=jup.get(c.mint)))
+            except Exception as e:
+                self.log.event("strategy", "error", {"error": repr(e)}, mint=c.mint, symbol=c.symbol)
+                continue
+            if isinstance(card, ScoreCard):
+                self._lab(c, card.score, metrics.get("lp_locked_pct"), (jup.get(c.mint) or {}).get("decimals"))
 
     def _shadow(self, c, kind: str, score: float | None, decimals: int | None) -> None:
         if c is None or not self.shadow.wants(c.mint):
@@ -246,8 +293,10 @@ class Desk:
                            line=shadow_line(pos))
 
     def shadow_tick(self) -> None:
-        positions = self.shadow.open_positions()
+        positions = self.shadow.open_positions() + (self.lab.open_positions() if self.lab else [])
         if not positions:
+            if self.lab:
+                self.lab.tick({})                   # keeps the equity curves going while flat
             return
         marks: dict[str, float] = {}
         want = {p.mint: p.pair_address for p in positions}
@@ -271,6 +320,13 @@ class Desk:
         for pos in self.shadow.tick(marks, self.risk):
             self.log.event("shadow", "shadow_close", shadow_payload(pos), mint=pos.mint, symbol=pos.symbol,
                            line=shadow_line(pos))
+        if self.lab:
+            for p in self.lab.tick(marks):
+                pct = p.pnl_usd / p.cost_usd * 100 if p.cost_usd else 0.0
+                self.log.event("strategy", "strategy_close", {"strategy": p.strategy, "position_id": p.id,
+                                                               "pnl_pct": pct, "reason": p.exit_reason},
+                               mint=p.mint, symbol=p.symbol,
+                               line=f"{p.strategy.upper()} SELL {p.symbol:<10} {pct:+.1f}% ({p.exit_reason})")
 
     def _shadow_loop(self) -> None:
         while not self.stop_event.is_set():

@@ -106,13 +106,13 @@ class Executor:
             cap = self.equity() * self.cfg.max_position_pct / 100.0
             return max(0.0, min(cap, self.cash - self.cfg.tx_cost_usd))
 
-    def _fit_size(self, mint: str, size: float, max_quotes: int = 5):
+    def _fit_size(self, mint: str, size: float, max_quotes: int = 5, cap: float | None = None):
         """Quote the order. With max_price_impact_pct = 0 (the default) the full size is taken
         as quoted. With a cap set, find the largest order (<= size) whose quote stays within it:
         quoted impact is roughly a fee floor plus a slope in size, so after two quotes we solve
         the line for the target size; before that we scale down proportionally.
         Returns (quote, size, impact_pct, tried) - quote is None if nothing fits."""
-        cap = self.cfg.max_price_impact_pct
+        cap = self.cfg.max_price_impact_pct if cap is None else cap
         tried: list[tuple[float, float]] = []
         if cap <= 0:
             quote = self.src.jup.buy_quote(mint, size, self.cfg.quote_slippage_bps)

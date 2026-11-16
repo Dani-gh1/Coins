@@ -31,7 +31,7 @@ HOST_RPM = {
     "api.mainnet-beta.solana.com": 100,
 }
 SHADOW_RPM = {
-    "api.dexscreener.com": 20,     # shadow marks every few seconds (all shadows in one or two calls)
+    "api.dexscreener.com": 20,     # shadow and strategy-book marks every few seconds, in one or two calls
 }
 RISK_RPM = {
     "api.dexscreener.com": 90,     # one mark request per risk tick (all positions in one call)
