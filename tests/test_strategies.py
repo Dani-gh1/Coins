@@ -100,7 +100,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -345,3 +345,13 @@ class Strategy12Tests(unittest.TestCase):
         from desk.strategies import STRATEGIES
         s12 = next(s for s in STRATEGIES if s.key == "s12")
         self.assertEqual((s12.stake_pct, s12.pause_after_losses, s12.pause_hours, s12.min_score), (8.0, 2, 48, 76))
+
+
+class Strategy13Tests(unittest.TestCase):
+    def test_only_the_stake_differs_from_strategy_12(self):
+        from dataclasses import asdict
+        from desk.strategies import STRATEGIES
+        s12, s13 = (next(s for s in STRATEGIES if s.key == k) for k in ("s12", "s13"))
+        diff = {k for k, v in asdict(s13).items() if asdict(s12)[k] != v} - {"key", "name", "rules"}
+        self.assertEqual(diff, {"stake_pct"})
+        self.assertEqual(s13.stake_pct, 15.0)

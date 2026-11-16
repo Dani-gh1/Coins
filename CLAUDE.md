@@ -28,7 +28,7 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
 - `python3 -m desk run --dashboard 8787` (brug `python3`, ikke `python`, på brugerens Mac).
 - Dashboardet ligger på `http://127.0.0.1:8787` (dansk UI, 4 faner).
 - Papirbogen gemmes portabelt i `runs/state.json` og gendannes, når databasen er tom.
-- Testene køres med `python3 -m unittest discover -s tests` (92 tests).
+- Testene køres med `python3 -m unittest discover -s tests` (93 tests).
 - **Desken kører 24/7 på brugerens Oracle Cloud-server** (Ubuntu 24.04, offentlig IP 89.168.96.169,
   bruger `ubuntu`, mappe `~/Coins`) som systemd-servicen `desk` (`Restart=always`). Brugeren logger
   ind fra Macen med `ssh -i ~/.ssh/oracle ubuntu@89.168.96.169`. Opdatering på serveren:
@@ -41,18 +41,18 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
   den ligger på serveren. Serverens nye handler ligger i dens database, ikke på GitHub.
 - Notifikationer til telefonen via ntfy-appen (`desk/notify.py`): miljøvariablen `NTFY_TOPIC` sættes
   med `sudo systemctl edit desk` ligesom `JUPITER_API_KEY`. Sendes kun ved køb, salg, stop og nedbrud (brugerens ønske),
-  og ved køb og salg i hver af strategierne (S1–S12).
+  og ved køb og salg i hver af strategierne (S1–S13).
 - **Strategitest (midlertidig, fra 2026-11-16):** `desk/strategies.py` kører tre regelsæt på virtuelle
   konti side om side (1 bredt vindue, 2 nuværende regler, 3 gamle regler: score ≥ 70, 8 %, LP 90 %,
   trail +12 %, intet loft på prisvirkning/positioner, 4 som 2 men trailing fra +15 % og 10 % under toppen, 5 som 2 men likviditet ≥ $100k
   og prisvirkning ≤ 0,5 %, 6 "Kræsen": score ≥ 76, likviditet ≥ $100k, prisvirkning ≤ 0,5 %, trailing
   +15 %/10 %, 7 "Profil B": brugerens egen profil, 8 "Aggressiv": mål 1 %/dag, 10 % indsats, score ≥ 65,
   9 "Hurtig gevinst": som 2 + gevinstmål +12 % og tidsgrænse 2 t, 10 "Kræsen+": 6 skærpet med 3 %,
-  11 "Kræsen+ stor": 10 med 6 % og pause efter 2 tab, 12 "Kræsen+ max": 10 med 8 % og 48 t pause; se `desk/strategies.py`). Dashboardet viser KUN strategitesten, fordi
+  11 "Kræsen+ stor": 10 med 6 % og pause efter 2 tab, 12 "Kræsen+ max": 10 med 8 % og 48 t pause, 13 "Kræsen+ 15 %": 12 med 15 % (kun virtuel); se `desk/strategies.py`). Dashboardet viser KUN strategitesten, fordi
   `dashboard_view = "strategies"` i `desk/config.py`. Når brugeren siger til, skiftes det tilbage
   ved at sætte `dashboard_view = "full"` (det normale dashboard er urørt i `dashboard.html` og kan
   altid ses på `/full`). Spørg, om strategitesten (`strategy_test`) også skal slås fra.
-  Alle strategier nulstilles samtidig ved at ændre `strategy_epoch` i config (sidst: 2026-11-16, 12 strategier).
+  Alle strategier nulstilles samtidig ved at ændre `strategy_epoch` i config (sidst: 2026-11-16, 13 strategier).
 - Der arbejdes på branchen `claude/gallant-planck-vsfkxd`.
 
 ## Brugerens ønsker (vigtigt)
