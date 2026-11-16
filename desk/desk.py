@@ -259,6 +259,7 @@ class Desk:
             opened = self.lab.consider(c, score, lp, decimals)
             self.lab.note(c, score, lp, [p.strategy for p in opened])
             for p in opened:
+                self._notify_lab_buy(p)
                 self.log.event("strategy", "strategy_open", {"strategy": p.strategy, "position_id": p.id, "score": score,
                                                               "impact_pct": p.entry_impact_pct},
                                mint=p.mint, symbol=p.symbol,
@@ -328,6 +329,7 @@ class Desk:
                            line=shadow_line(pos))
         if self.lab:
             for p in self.lab.tick(marks):
+                self._notify_lab_sell(p)
                 pct = p.pnl_usd / p.cost_usd * 100 if p.cost_usd else 0.0
                 self.log.event("strategy", "strategy_close", {"strategy": p.strategy, "position_id": p.id,
                                                                "pnl_pct": pct, "reason": p.exit_reason},
@@ -432,6 +434,24 @@ class Desk:
         result = (pos.pnl_usd or 0) / pos.cost_usd * 100 if pos.cost_usd else 0.0
         self.notify.send(f"Salg: {pos.symbol} {pct(result)}",
                          f"{REASONS.get(pos.exit_reason, pos.exit_reason)} · kontoen står på {pct(self._return_pct(), 2)} siden start",
+                         tags=("chart_with_upwards_trend",) if result > 0 else ("chart_with_downwards_trend",))
+
+    def _lab_book(self, key: str):
+        return next(b for b in self.lab.books if b.r.key == key)
+
+    def _notify_lab_buy(self, p) -> None:
+        b = self._lab_book(p.strategy)
+        stake = p.cost_usd / (b.equity() + p.cost_usd - p.qty * p.last_price) * 100
+        self.notify.send(f"{p.strategy.upper()} køb: {p.symbol}",
+                         f"{b.r.name} · score {p.score:.0f} · indsats {stake:.1f} % af kontoen".replace(".", ","),
+                         tags=("shopping_cart",))
+
+    def _notify_lab_sell(self, p) -> None:
+        b = self._lab_book(p.strategy)
+        result = p.pnl_usd / p.cost_usd * 100 if p.cost_usd else 0.0
+        total = (b.equity() / b.start_equity - 1) * 100 if b.start_equity else 0.0
+        self.notify.send(f"{p.strategy.upper()} salg: {p.symbol} {pct(result)}",
+                         f"{b.r.name} · {REASONS.get(p.exit_reason, p.exit_reason)} · kontoen står på {pct(total, 2)}",
                          tags=("chart_with_upwards_trend",) if result > 0 else ("chart_with_downwards_trend",))
 
     def _marks(self, positions) -> dict[str, float]:

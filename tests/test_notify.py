@@ -112,3 +112,27 @@ class NotifierTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StrategyNotificationTests(unittest.TestCase):
+    def test_every_strategy_buy_and_sale_is_sent(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder()
+            src = sources()
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False,
+                        sources=src, notifier=rec)
+            desk.scan_cycle()
+            titles = [m[0] for m in rec.msgs]
+            for k in ("S1", "S2", "S3"):
+                self.assertIn(f"{k} køb: GOOD", titles)
+            s3 = next(m for m in rec.msgs if m[0] == "S3 køb: GOOD")
+            self.assertIn("Gamle regler", s3[1])
+            self.assertIn("indsats 8,0 %", s3[1])
+            src.jup.price["GOOD"] = 0.0005
+            desk.shadow_tick()
+            sells = [m for m in rec.msgs if " salg: GOOD " in m[0]]
+            self.assertEqual(sorted(m[0][:2] for m in sells), ["S1", "S2", "S3"])
+            self.assertTrue(all("Stop loss" in m[1] and "kontoen står på −" in m[1] for m in sells))
+            self.assertNotIn("$", " ".join(t + m for t, m, _ in rec.msgs))
+            desk.log.close()
+            desk.store.close()
