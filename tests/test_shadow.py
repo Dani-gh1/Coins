@@ -102,3 +102,58 @@ class ShadowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WideWindowTests(unittest.TestCase):
+    def test_wide_coins_are_only_shadow_traded_and_never_enter_the_real_journal(self):
+        from desk.agents.scout import wide_segment
+        from desk.config import ScoutConfig, ShadowConfig
+        cfg, wide = ScoutConfig(), ShadowConfig()
+        self.assertEqual(wide_segment(0.25, 1_000_000, cfg, wide), "young")
+        self.assertEqual(wide_segment(5.0, 150_000, cfg, wide), "low_mcap")
+        self.assertEqual(wide_segment(100.0, 1_000_000, cfg, wide), "old")
+        self.assertIsNone(wide_segment(5.0, 50_000, cfg, wide))          # outside the wide window too
+        self.assertIsNone(wide_segment(200.0, 1_000_000, cfg, wide))
+
+        names = {"YOUNG": dict(age_h=0.25), "CHEAP": dict(mcap=150_000, liq=60_000), "OLD": dict(age_h=100.0),
+                 "TINY": dict(mcap=50_000)}
+        pairs = [pair(mint="GOOD", symbol="GOOD")] + [pair(mint=m, symbol=m, **kw) for m, kw in names.items()]
+        mints = ["GOOD", *names]
+        src = FakeSources(
+            pairs=pairs, rugs={m: rug_report(m) for m in mints}, jup_tokens={m: jup_token(m) for m in mints},
+            prices={m: 0.001 for m in mints},
+            trades_by_pool={f"PAIR_{m}": trades(n_real=150, n_sells=40, prefix=m) for m in mints})
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=src)
+            stats = desk.scan_cycle()
+            self.assertEqual((stats["entered"], stats["wide_seen"], stats["wide_evaluated"]), (1, 3, 3))
+            kinds = {r["mint"]: r["kind"] for r in desk.store.query("SELECT mint, kind FROM shadow_positions")}
+            self.assertEqual(kinds, {"GOOD": "scored", "YOUNG": "wide_young", "CHEAP": "wide_low_mcap",
+                                     "OLD": "wide_old"})
+            # the real journal only knows the real window
+            for table, where in (("kills", ""), ("scores", ""), ("events", " WHERE agent != 'shadow'")):
+                seen = {r["mint"] for r in desk.store.query(f"SELECT DISTINCT mint FROM {table}{where}") if r["mint"]}
+                self.assertFalse(seen & set(names), table)
+            self.assertEqual({p.mint for p in desk.executor.open_positions()}, {"GOOD"})
+            # a wide coin is not re-evaluated every cycle
+            self.assertEqual(desk.scan_cycle()["wide_evaluated"], 0)
+            # dashboard rows per segment
+            src.jup.price["OLD"] = 0.0009
+            desk.shadow_tick()
+            sh = snapshot(desk.store.path, min_score=73)["shadow"]
+            self.assertEqual([w["segment"] for w in sh["wide"]], ["old"])
+            self.assertEqual(sh["wide"][0]["all"]["n"], 1)
+            desk.log.close()
+            desk.store.close()
+
+    def test_wide_work_per_cycle_is_capped(self):
+        many = {f"Y{i}": dict(age_h=0.3) for i in range(7)}
+        pairs = [pair(mint=m, symbol=m, **kw) for m, kw in many.items()]
+        src = FakeSources(pairs=pairs, rugs={m: rug_report(m) for m in many}, jup_tokens={m: jup_token(m) for m in many},
+                          prices={m: 0.001 for m in many}, trades_by_pool={})
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=src)
+            stats = desk.scan_cycle()
+            self.assertEqual((stats["wide_seen"], stats["wide_evaluated"]), (7, 4))
+            desk.log.close()
+            desk.store.close()

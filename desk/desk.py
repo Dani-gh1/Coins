@@ -52,7 +52,7 @@ class Desk:
         # API's rate limit, so a slow scan (or a 429 back-off on it) never delays a stop.
         self.risk_src = sources or Sources(Http(timeout=6.0, retries=1, rpm=RISK_RPM))
         self.book = SmartWalletBook(self.store, cfg.smart_wallet_seed_file)
-        self.scout = Scout(cfg.scout, self.src)
+        self.scout = Scout(cfg.scout, self.src, cfg.shadow)
         self.filter = Filter(cfg.filter, self.src)
         self.analyst = Analyst(cfg.analyst, self.src, self.book)
         self.risk = Risk(cfg.risk, cfg.analyst)
@@ -65,6 +65,7 @@ class Desk:
         self.notify.on_error = lambda err: self.log.event(
             "notify", "error", {"error": err}, line=f"notification failed: {err}")
         self._jup_key_reported = False
+        self.wide_recheck: dict[str, float] = {}     # the wide window's own cooldowns (never in the real journal)
         self.stop_event = threading.Event()
         now = time.time()
         self.recheck_at: dict[str, float] = {
@@ -179,6 +180,7 @@ class Desk:
 
         for c in pumped:
             self._shadow(c, "pumped", None, None)
+        self._wide(rep.wide or [], stats)
         self._learn()
         if jupiter_key_rejected() and not self._jup_key_reported:
             self._jup_key_reported = True
@@ -194,6 +196,39 @@ class Desk:
                        line=f"cycle {self.cycle} done in {stats['seconds']}s | equity ${stats['equity']:,.2f} "
                             f"| open {stats['open_positions']} | smart book {stats['smart_wallets']}")
         return stats
+
+    def _wide(self, wide, stats: dict) -> None:
+        """Coins only inside the shadow's wide window: same Filter and Analyst, shadow trades only.
+        Nothing is written to the real journal (kills, scores, candidates), so the dashboard's
+        real numbers stay about the real window. Runs last in the cycle, a few coins at a time."""
+        now = time.time()
+        todo = [(c, seg) for c, seg in wide
+                if self.wide_recheck.get(c.mint, 0) <= now and not self.executor.holds(c.mint)
+                and self.shadow.wants(c.mint, now)][: self.cfg.shadow.wide_per_cycle]
+        stats["wide_seen"], stats["wide_evaluated"] = len(wide), len(todo)
+        if not todo:
+            return
+        segment = {c.mint: seg for c, seg in todo}
+        try:
+            results = self.filter.evaluate([c for c, _ in todo])
+        except Exception as e:  # the measurement must never break the scan
+            self.log.event("shadow", "error", {"error": repr(e)})
+            return
+        for result in results:
+            if isinstance(result, Kill):
+                self.wide_recheck[result.mint] = now + result.recheck_after_s
+                continue
+            c = result.candidate
+            self.wide_recheck[c.mint] = now + self.cfg.analyst.rescore_after_minutes * 60
+            try:
+                card = self.analyst.evaluate(result)
+            except Exception as e:
+                self.log.event("shadow", "error", {"error": repr(e)}, mint=c.mint, symbol=c.symbol)
+                continue
+            if isinstance(card, ScoreCard):
+                self._shadow(c, "wide_" + segment[c.mint], card.score, (result.jupiter or {}).get("decimals"))
+        if len(self.wide_recheck) > 5000:          # keep the dict small on a long run
+            self.wide_recheck = {m: t for m, t in self.wide_recheck.items() if t > now}
 
     def _shadow(self, c, kind: str, score: float | None, decimals: int | None) -> None:
         if c is None or not self.shadow.wants(c.mint):

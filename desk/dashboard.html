@@ -799,11 +799,19 @@ function shadowCard(state) {
     head("Tærskel", "Handler", "Vundne", "Gns."),
     sh.thresholds.flatMap((t) => rowOf((t.min === 0 ? "Alle scorede" : "Score ≥ " + num(t.min)) + (t.current ? " (nu)" : ""), t, t.current)),
     sh.pumped ? rowOf("Afvist: pumpet", sh.pumped, false) : []);
+  const WIDE = { young: "Yngre end 30 min", low_mcap: "Mcap $100k–300k", old: "Ældre end 72 t" };
+  const minScore = state.min_score;
+  const wide = (sh.wide || []).length ? h("div", null,
+    h("div", { class: "note", style: "margin:22px 0 8px", text: "Bredt vindue: coins uden for det rigtige vindue ($100k–$20M, 10 min–7 dage), som kun skyggehandles." }),
+    h("div", { class: "tgrid tgrid4" },
+      head("Del af vinduet", "Handler", "Vundne", "Gns."),
+      sh.wide.flatMap((w) => [...rowOf(WIDE[w.segment] + ", alle", w.all, false),
+                              ...rowOf(WIDE[w.segment] + ", score ≥ " + num(minScore), w.at_min, true)]))) : null;
   const recent = h("div", { class: "tgrid tgrid3", style: "margin-top:22px" },
     head("Seneste skyggehandler", "Score", "Resultat"),
     sh.recent.flatMap((r) => [
       h("div", null, h("span", { class: "strong", text: r.symbol || "?" }), h("span", { class: "note", text: "  " + when(r.opened_ts) })),
-      h("div", { class: "r", text: r.kind === "pumped" ? "pumpet" : f(r.score) }),
+      h("div", { class: "r", text: r.kind === "pumped" ? "pumpet" : (r.kind.startsWith("wide_") ? "bredt " : "") + f(r.score) }),
       h("div", { class: "r" }, r.status === "open"
         ? h("span", { class: "note", text: "åben " + (r.open_pct == null ? "" : pct(r.open_pct)) })
         : delta(r.pnl_pct, pct(r.pnl_pct) + (r.exit_reason === "stale_price" ? " (ingen kurs)" : "")))]));
@@ -811,7 +819,7 @@ function shadowCard(state) {
     "Desken lader som om, den køber hver coin, der får en score – også under tærsklen – og følger den med de rigtige regler (stop, trailing, karantæne). "
       + "Ingen penge flyttes, og papirkontoen påvirkes ikke. Procent er af indsatsen. Salget er et estimat. Siden " + when(sh.first_ts)
       + " · " + num(sh.closed) + " lukkede · " + num(sh.open) + " åbne.",
-    h("div", null, table,
+    h("div", null, table, wide,
       h("div", { class: "note", style: "margin-top:10px", text: "Brug tabellen til at sammenligne tærskler med hinanden, når der er mindst 20–30 handler i en række. Færre end det er mest tilfældighed." }),
       recent));
 }

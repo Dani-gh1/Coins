@@ -21,6 +21,25 @@ class ScoutReport:
     feed_counts: dict[str, int]
     mints_seen: int
     pairs_seen: int
+    # Coins outside the real window but inside the shadow's wide one: (candidate, segment).
+    wide: list[tuple[Candidate, str]] = None
+
+
+def wide_segment(age_h: float, mcap: float, cfg: ScoutConfig, wide) -> str | None:
+    """Which part of the wide window a coin outside the real window falls in, or None.
+    'young' (younger than the real window), 'low_mcap' (cheaper), 'old' (older)."""
+    if wide is None or age_h < 0:
+        return None
+    if not (wide.wide_min_pair_age_minutes / 60.0 <= age_h <= wide.wide_max_pair_age_hours
+            and wide.wide_min_mcap_usd <= mcap <= wide.wide_max_mcap_usd):
+        return None
+    if age_h < cfg.min_pair_age_minutes / 60.0:
+        return "young"
+    if mcap < cfg.min_mcap_usd:
+        return "low_mcap"
+    if age_h > cfg.max_pair_age_hours:
+        return "old"
+    return None
 
 
 def best_pair(pairs: list[dict], mint: str, accepted_quotes: tuple[str, ...]) -> dict | None:
@@ -70,9 +89,10 @@ def to_candidate(pair: dict, age_h: float, mcap: float, via: tuple[str, ...]) ->
 class Scout:
     name = "scout"
 
-    def __init__(self, cfg: ScoutConfig, sources: Sources):
+    def __init__(self, cfg: ScoutConfig, sources: Sources, wide=None):
         self.cfg = cfg
         self.src = sources
+        self.wide = wide if (wide is not None and wide.enabled and wide.wide_window) else None
         # Trending pools (pool -> mint) from the last scan, used by the smart-wallet learner.
         self.pool_mint: dict[str, str] = {}
         self.last_trending: list[str] = []
@@ -118,6 +138,7 @@ class Scout:
 
         now = time.time()
         out: list[Candidate] = []
+        wide: list[tuple[Candidate, str]] = []
         for mint, ps in by_mint.items():
             if mint not in feeds:
                 continue
@@ -127,5 +148,10 @@ class Scout:
             ok, age_h, mcap = in_window(pair, self.cfg, now)
             if ok:
                 out.append(to_candidate(pair, age_h, mcap, tuple(sorted(feeds[mint]))))
+            else:
+                seg = wide_segment(age_h, mcap, self.cfg, self.wide)
+                if seg:
+                    wide.append((to_candidate(pair, age_h, mcap, tuple(sorted(feeds[mint]))), seg))
         out.sort(key=lambda c: c.volume.get("h1", 0.0), reverse=True)
-        return ScoutReport(out, list(self.last_trending), feed_counts, len(feeds), len(pairs))
+        wide.sort(key=lambda cs: cs[0].volume.get("h1", 0.0), reverse=True)
+        return ScoutReport(out, list(self.last_trending), feed_counts, len(feeds), len(pairs), wide)

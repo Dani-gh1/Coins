@@ -76,6 +76,13 @@ thread with its own HTTP client, never delays a real stop and never touches the 
 It ignores the 3-position cap on purpose. The dashboard's Handler tab shows "what if the
 threshold had been X". Switch it off with `[shadow] enabled = false`.
 
+The shadow also has a **wide window**: $100k–$20M and 10 min–7 days (`shadow.wide_*`). Coins
+outside the real window but inside the wide one go through the same Filter and Analyst and
+are only shadow-traded, at most 4 new ones per cycle. They are kept out of the real journal
+(kills, scores, candidates), so the dashboard's real numbers stay about the real window. The
+Handler tab shows each part of the wide window (younger than 30 min, mcap $100k–300k, older
+than 72 h) so we can see whether widening the real window would pay.
+
 ## Phone notifications
 
 Set `NTFY_TOPIC` (a long, hard-to-guess name) and subscribe to the same topic in the free
@@ -95,7 +102,7 @@ python3 -m desk once                           # a single scan cycle
 python3 -m desk report --run-id night1         # P&L, trades, kill table, top scores
 python3 -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
 python3 -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
-python3 -m unittest discover -s tests -t .     # 72 offline tests
+python3 -m unittest discover -s tests -t .     # 74 offline tests
 ```
 
 ### Dashboard

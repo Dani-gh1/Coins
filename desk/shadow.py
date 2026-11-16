@@ -26,7 +26,9 @@ from .config import RiskConfig, ShadowConfig
 from .messages import Candidate, new_id
 from .store import Store
 
-KINDS = ("scored", "pumped")      # scored by the Analyst / killed by the Filter only for +80% in 1h
+# scored by the Analyst / killed by the Filter only for +80% in 1h / scored, but only inside the
+# wide shadow window (younger than 30 min, mcap under $300k, or older than 72 h)
+KINDS = ("scored", "pumped", "wide_young", "wide_low_mcap", "wide_old")
 
 
 @dataclass
@@ -160,6 +162,8 @@ class ShadowBook:
 
 def shadow_line(pos: ShadowPosition) -> str:
     score = "pumpet" if pos.kind == "pumped" else f"score {pos.score:.0f}"
+    if pos.kind.startswith("wide_"):
+        score += ", " + pos.kind
     if pos.status == "open":
         return f"SHADOW BUY  {pos.symbol:<10} ({score}) impact {pos.entry_impact_pct:.2f}%"
     return f"SHADOW SELL {pos.symbol:<10} ({score}) {pos.pnl_pct:+.1f}% ({pos.exit_reason})"

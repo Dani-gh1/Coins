@@ -100,6 +100,15 @@ class ShadowConfig:
     include_pumped: bool = True               # also coins the Filter only killed for +80% in 1h
     max_open: int = 40
     poll_seconds: float = 5.0                 # how often shadow positions are marked
+    # A wider window, for shadow trades only: coins outside the real window (30 min - 72 h,
+    # $300k - $20M) but inside this one go through the same Filter and Analyst and are only
+    # shadow-traded. Tells us whether a wider real window would pay, without touching it.
+    wide_window: bool = True
+    wide_min_pair_age_minutes: float = 10.0
+    wide_max_pair_age_hours: float = 168.0
+    wide_min_mcap_usd: float = 100_000.0
+    wide_max_mcap_usd: float = 20_000_000.0
+    wide_per_cycle: int = 4                   # at most this many wide coins filtered per cycle
 
 
 @dataclass
