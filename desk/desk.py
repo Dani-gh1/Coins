@@ -31,12 +31,14 @@ from .messages import Deferral, ExitSignal, Kill, ScoreCard
 from .shadow import ShadowBook, shadow_line, shadow_payload
 from .smart_wallets import SmartWalletBook
 from .net import RISK_RPM, SHADOW_RPM, Http
+from .notify import REASONS, Notifier, pct
 from .sources import Sources
 from .store import Store
 
 
 class Desk:
-    def __init__(self, cfg: DeskConfig, run_id: str, echo: bool = True, sources: Sources | None = None):
+    def __init__(self, cfg: DeskConfig, run_id: str, echo: bool = True, sources: Sources | None = None,
+                 notifier: Notifier | None = None):
         self.cfg = cfg
         self.run_id = run_id
         data_dir = Path(cfg.data_dir)
@@ -59,6 +61,7 @@ class Desk:
         self.shadow_src = sources or Sources(Http(timeout=6.0, retries=1, rpm=SHADOW_RPM))
         self.shadow = ShadowBook(cfg.shadow, cfg.risk, self.store, self.executor,
                                  cfg.executor.reentry_cooldown_minutes, cfg.executor.tx_cost_usd)
+        self.notify = notifier or Notifier.from_env()
         self.stop_event = threading.Event()
         now = time.time()
         self.recheck_at: dict[str, float] = {
@@ -164,6 +167,7 @@ class Desk:
                         self._kill(outcome)
                     else:
                         self.log.fill(*outcome)
+                        self._notify_buy(*outcome)
                         stats["entered"] += 1
             else:
                 self._kill(self._analyst_kill(card))
@@ -301,9 +305,28 @@ class Desk:
         result = self.executor.exit(sig)
         if result:
             self.log.fill(*result)
+            self._notify_sell(*result)
         else:
             self.log.event("executor", "exit_retry", {"position_id": pos.id, "reason": sig.reason},
                            mint=pos.mint, symbol=pos.symbol, line=f"exit for {pos.symbol} pending (no route)")
+
+    # ---- phone notifications (desk/notify.py) ------------------------------------
+    def _return_pct(self) -> float:
+        start = self.store.get_account("starting_equity") or 0.0
+        return (self.executor.equity() / start - 1) * 100 if start else 0.0
+
+    def _notify_buy(self, fill, pos) -> None:
+        equity_before = self.executor.equity() - (pos.qty * pos.last_price - pos.cost_usd)
+        stake = pos.cost_usd / equity_before * 100 if equity_before else 0.0
+        self.notify.send(f"Køb: {pos.symbol}",
+                         f"Score {pos.score:.0f} · indsats {stake:.1f} % af kontoen · stop −{self.cfg.risk.stop_loss_pct:g} %"
+                         .replace(".", ","), tags=("shopping_cart",))
+
+    def _notify_sell(self, fill, pos) -> None:
+        result = (pos.pnl_usd or 0) / pos.cost_usd * 100 if pos.cost_usd else 0.0
+        self.notify.send(f"Salg: {pos.symbol} {pct(result)}",
+                         f"{REASONS.get(pos.exit_reason, pos.exit_reason)} · kontoen står på {pct(self._return_pct(), 2)} siden start",
+                         tags=("chart_with_upwards_trend",) if result > 0 else ("chart_with_downwards_trend",))
 
     def _marks(self, positions) -> dict[str, float]:
         """Mark each position on the pool it was bought from (DexScreener), falling back to the
@@ -360,6 +383,13 @@ class Desk:
                                          "open_positions": len(self.executor.positions),
                                          "smart_wallets": self.book.size()},
                        line=f"run {self.run_id} starting (paper) equity ${self.executor.equity():,.2f}")
+        if prev_clean:
+            self.notify.send("Desken er startet", f"Kontoen står på {pct(self._return_pct(), 2)} · "
+                             f"{len(self.executor.positions)} åbne positioner", tags=("arrow_forward",), priority=2)
+        else:
+            self.notify.send("Desken genstartede efter et nedbrud",
+                             f"Den stoppede uden at lukke pænt ned og kører nu igen · kontoen står på {pct(self._return_pct(), 2)}",
+                             tags=("warning",), priority=4)
         risk_thread = threading.Thread(target=self._risk_loop, name="risk", daemon=True)
         risk_thread.start()
         shadow_thread = None
@@ -392,6 +422,11 @@ class Desk:
             self.save_state()
             self.store.set_account("last_seen", time.time())
             self.store.set_account("clean_stop", True)
+            self.notify.send("Desken er stoppet", f"Kontoen står på {pct(self._return_pct(), 2)} · "
+                             f"{len(self.executor.positions)} åbne positioner er ubeskyttede, til den kører igen"
+                             if self.executor.positions else f"Kontoen står på {pct(self._return_pct(), 2)}",
+                             tags=("stop_sign",), priority=4)
+            self.notify.flush()
             self.log.event("desk", "stop", {"equity": self.executor.equity(),
                                             "open_positions": len(self.executor.positions),
                                             "http": dict(self.src.http.stats)},

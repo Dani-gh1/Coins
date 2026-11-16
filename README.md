@@ -76,6 +76,13 @@ thread with its own HTTP client, never delays a real stop and never touches the 
 It ignores the 3-position cap on purpose. The dashboard's Handler tab shows "what if the
 threshold had been X". Switch it off with `[shadow] enabled = false`.
 
+## Phone notifications
+
+Set `NTFY_TOPIC` (a long, hard-to-guess name) and subscribe to the same topic in the free
+[ntfy](https://ntfy.sh) app. The desk then sends a message on every real buy and sale, when it
+starts, when it stops, and when it comes back after a crash. Results are in percent. Messages
+go out from a background thread and never delay a trade. Shadow trades send nothing.
+
 ## Run it
 
 Python ≥ 3.11, standard library only. No API keys needed. On macOS and most Linux systems the
@@ -88,7 +95,7 @@ python3 -m desk once                           # a single scan cycle
 python3 -m desk report --run-id night1         # P&L, trades, kill table, top scores
 python3 -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
 python3 -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
-python3 -m unittest discover -s tests -t .     # 64 offline tests
+python3 -m unittest discover -s tests -t .     # 70 offline tests
 ```
 
 ### Dashboard
