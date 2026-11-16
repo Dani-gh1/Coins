@@ -49,7 +49,7 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
   +15 %/10 %, 7 "Profil B": brugerens egen profil, 8 "Aggressiv": mål 1 %/dag, 10 % indsats, score ≥ 65,
   9 "Hurtig gevinst": som 2 + gevinstmål +12 % og tidsgrænse 2 t, 10 "Kræsen+": 6 skærpet med 3 %,
   11 "Kræsen+ stor": 10 med 6 % og pause efter 2 tab, 12 "Kræsen+ max": 10 med 8 % og 48 t pause, 13 "Kræsen+ 15 %": 12 med 15 % (kun virtuel), 14 "Max kræsen":
-  alle kræsne krav strammest (score ≥ 82, liq ≥ $250k, impact ≤ 0,2 %) og 15 %, 15 "Bred max kræsen": 14 i 1's brede vindue; se `desk/strategies.py`). Dashboardet viser KUN strategitesten, fordi
+  alle kræsne krav strammest (score ≥ 82, liq ≥ $250k, impact ≤ 0,2 %) og 15 %, 15 "Bred Kræsen+ 15 %": 13 i 1's brede vindue; se `desk/strategies.py`). Dashboardet viser KUN strategitesten, fordi
   `dashboard_view = "strategies"` i `desk/config.py`. Når brugeren siger til, skiftes det tilbage
   ved at sætte `dashboard_view = "full"` (det normale dashboard er urørt i `dashboard.html` og kan
   altid ses på `/full`). Spørg, om strategitesten (`strategy_test`) også skal slås fra.

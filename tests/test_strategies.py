@@ -372,7 +372,7 @@ class Strategy14Tests(unittest.TestCase):
 
 
 class Strategy15Tests(unittest.TestCase):
-    def test_strategy_14_rules_in_strategy_1_window(self):
+    def test_strategy_13_rules_in_strategy_1_window(self):
         from dataclasses import asdict
         from desk.strategies import STRATEGIES
         by = {s.key: asdict(s) for s in STRATEGIES}
@@ -380,4 +380,4 @@ class Strategy15Tests(unittest.TestCase):
         for k, v in by["s15"].items():
             if k in ("key", "name", "rules"):
                 continue
-            self.assertEqual(v, by["s1" if k in window else "s14"][k], k)
+            self.assertEqual(v, by["s1" if k in window else "s13"][k], k)

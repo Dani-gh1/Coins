@@ -20,7 +20,7 @@ virtual account, so they can be compared fairly from the same start.
   13 Kræsen+ 15 %      strategy 12 with a 15% stake: virtual only (the paper account's cap stays 8%)
   14 Max kræsen        every picky setting at its tightest realistic value (score >= 82, $250k liquidity,
                        0.2% impact, LP 100%, top 10 <= 15%, dev <= 1%, bundles <= 3%) and a 15% stake
-  15 Bred max kræsen   strategy 14's rules in strategy 1's wide window ($100k-$20M, 10 min-7 days)
+  15 Bred Kræsen+ 15 % strategy 13's rules in strategy 1's wide window ($100k-$20M, 10 min-7 days)
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -223,18 +223,16 @@ STRATEGIES = (
         }), min_liq_usd=250_000, min_vol_1h_usd=150_000, max_change_1h_pct=25, max_top10_pct=15,
         max_dev_pct=1, max_bundle_pct=3, max_entry_drift_pct=1.0, pause_after_losses=2, pause_hours=48),
     StrategyRules(
-        "s15", "Bred max kræsen", 10, 168, 100_000, 20_000_000, 100, 82, 15.0, 0.2, 3, 120, 6, 15, 10,
+        "s15", "Bred Kræsen+ 15 %", 10, 168, 100_000, 20_000_000, 95, 76, 15.0, 0.3, 3, 120, 6, 15, 10,
         _rules({
-            "Idé": ["Strategi 1's brede vindue med alle strategi 14's stramme krav"],
+            "Idé": ["Strategi 1's brede vindue med alle strategi 13's regler"],
             "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio."],
-            "Filter": ["Likviditet ≥ $250k, 1-times volumen ≥ $150k, højst +25 % på 1 t.",
-                       "LP 100 % brændt/låst, top 10 ≤ 15 %, udvikler ≤ 1 %, bundtede ≤ 3 %"],
-            "Analyst": ["Køber ved score 82 eller mere"],
-            "Executor": ["15 % af kontoen pr. handel", "Prisvirkning højst 0,2 %",
-                         "Køber ikke, hvis kursen har flyttet sig over 1 %", "Højst 3 åbne", "Karantæne 2 t."],
+            "Filter": ["Likviditet ≥ $150k, højst +40 % på 1 t.", "LP mindst 95 %, top 10 ≤ 20 %, bundtede ≤ 5 %"],
+            "Analyst": ["Køber ved score 76 eller mere"],
+            "Executor": ["15 % af kontoen pr. handel", "Prisvirkning højst 0,3 %", "Højst 3 åbne", "Karantæne 2 t."],
             "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Pause i 48 t. efter 2 tab i træk"],
-        }), min_liq_usd=250_000, min_vol_1h_usd=150_000, max_change_1h_pct=25, max_top10_pct=15,
-        max_dev_pct=1, max_bundle_pct=3, max_entry_drift_pct=1.0, pause_after_losses=2, pause_hours=48),
+        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
+        pause_after_losses=2, pause_hours=48),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 
