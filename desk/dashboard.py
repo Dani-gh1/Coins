@@ -395,6 +395,32 @@ def _strategies(q, now: float, real_start: float, real_equity: float) -> dict | 
                         "reason": r["exit_reason"]} for r in closed[:8]],
             "curve": [[round(t, 1), round(v, 3)] for t, v in curve],
         })
+    # Speed: what each strategy got through, per hour and per day, from the per-round counts.
+    mark_every = q("SELECT value FROM account WHERE key='strategy_mark_every_s'")
+    mark_every = json.loads(mark_every[0]["value"]) if mark_every else None
+
+    def speed(seconds: float) -> dict:
+        since = now - seconds
+        rounds = [json.loads(r["payload"]) for r in
+                  q("SELECT payload FROM events WHERE kind='strategy_round' AND ts > ?", (since,))]
+        per = {}
+        for b in out:
+            k = b["key"]
+            rs = [r["books"].get(k) for r in rounds if r.get("books", {}).get(k)]
+            per[k] = {
+                "window_avg": sum(x["window"] for x in rs) / len(rs) if rs else None,
+                "scored": len({m for x in rs for m in x["scored"]}),
+                "qualified": len({m for x in rs for m in x["qualified"]}),
+                "bought": q("SELECT COUNT(*) AS n FROM strategy_positions WHERE strategy=? AND opened_ts > ?",
+                            (k, since))[0]["n"],
+            }
+        secs = [r.get("seconds") for r in rounds if r.get("seconds") is not None]
+        return {"rounds": len(rounds), "round_avg_s": sum(secs) / len(secs) if secs else None, "books": per}
+
+    for b in out:
+        held = q("SELECT AVG(closed_ts - opened_ts) AS s FROM strategy_positions WHERE strategy=? AND status='closed'",
+                 (b["key"],))[0]["s"]
+        b["avg_hold_s"] = held
     start_ts = min(b["start_ts"] for b in out) if out else None
     real = None
     if start_ts and real_start:
@@ -402,7 +428,8 @@ def _strategies(q, now: float, real_start: float, real_equity: float) -> dict | 
                "AND run_id IS NOT 'restored' ORDER BY ts LIMIT 1", (start_ts,))
         if at and at[0]["eq"]:
             real = (real_equity / at[0]["eq"] - 1) * 100
-    return {"books": out, "start_ts": start_ts, "real_since_pct": real}
+    return {"books": out, "start_ts": start_ts, "real_since_pct": real, "mark_every_s": mark_every,
+            "speed": {"hour": speed(3600), "day": speed(86400)}}
 
 
 SHADOW_THRESHOLDS = (0, 60, 65, 70, 73, 80)

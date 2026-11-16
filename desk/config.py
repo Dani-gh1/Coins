@@ -99,7 +99,7 @@ class ShadowConfig:
     enabled: bool = True
     include_pumped: bool = True               # also coins the Filter only killed for +80% in 1h
     max_open: int = 40
-    poll_seconds: float = 5.0                 # how often shadow positions are marked
+    poll_seconds: float = 2.0                 # how often shadow and strategy-book positions are marked
     # A wider window, for shadow trades only: coins outside the real window (30 min - 72 h,
     # $300k - $20M) but inside this one go through the same Filter and Analyst and are only
     # shadow-traded. Tells us whether a wider real window would pay, without touching it.

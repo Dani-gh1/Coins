@@ -257,6 +257,28 @@ class StrategyLab:
     def wants(self, c: Candidate) -> bool:
         return any(b.wants(c) for b in self.books)
 
+    # ---- speed: what each book sees per scan round, and how often it is marked ----------
+    def new_round(self, real_window: list[Candidate], wide: list[Candidate]) -> None:
+        self.round = {b.r.key: {"window": sum(1 for c in [*real_window, *wide] if b.in_window(c)),
+                                "scored": [], "qualified": [], "bought": 0} for b in self.books}
+
+    def note(self, c: Candidate, score: float, lp: float | None, bought: list[str]) -> None:
+        rnd = getattr(self, "round", None)
+        if rnd is None:
+            return
+        for b in self.books:
+            if not b.in_window(c):
+                continue
+            r = rnd[b.r.key]
+            r["scored"].append(c.mint)
+            if score >= b.r.min_score and (lp is None or lp >= b.r.min_lp_pct):
+                r["qualified"].append(c.mint)
+            r["bought"] += b.r.key in bought
+
+    def end_round(self) -> dict:
+        rnd, self.round = getattr(self, "round", None) or {}, None
+        return rnd
+
     def consider(self, c: Candidate, score: float, lp_pct: float | None, decimals: int | None) -> list[BookPosition]:
         out = []
         for b in self.books:
@@ -270,6 +292,13 @@ class StrategyLab:
 
     def tick(self, marks: dict[str, float], now: float | None = None) -> list[BookPosition]:
         now = now or time.time()
+        self._ticks = getattr(self, "_ticks", [])
+        self._ticks.append(now)
+        self._ticks = [t for t in self._ticks if now - t <= 300]
+        if len(self._ticks) > 1 and now - getattr(self, "_speed_at", 0) >= 60:
+            self._speed_at = now
+            gaps = len(self._ticks) - 1
+            self.store.set_account("strategy_mark_every_s", (self._ticks[-1] - self._ticks[0]) / gaps)
         closed = [p for b in self.books for p in b.tick(marks, self.risk, self.stale_s, now)]
         if closed or now - self._equity_at >= self.EQUITY_EVERY_S:
             self._equity_at = now

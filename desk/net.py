@@ -23,7 +23,7 @@ USER_AGENT = "memecoin-desk/0.1"
 #   429s against 723 answers in 2.5 h, so it is kept well under 10/min.
 #   With a free Jupiter API key (env JUPITER_API_KEY) the desk uses api.jup.ag at 60/min.
 HOST_RPM = {
-    "api.dexscreener.com": 180,
+    "api.dexscreener.com": 160,
     "api.geckoterminal.com": 8,
     "api.rugcheck.xyz": 40,
     "lite-api.jup.ag": 18,
@@ -31,7 +31,7 @@ HOST_RPM = {
     "api.mainnet-beta.solana.com": 100,
 }
 SHADOW_RPM = {
-    "api.dexscreener.com": 20,     # shadow and strategy-book marks every few seconds, in one or two calls
+    "api.dexscreener.com": 40,     # shadow and strategy-book marks every 2 s, one call for all of them
 }
 RISK_RPM = {
     "api.dexscreener.com": 90,     # one mark request per risk tick (all positions in one call)

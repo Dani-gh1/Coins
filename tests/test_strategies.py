@@ -120,3 +120,20 @@ class LabTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpeedTests(unittest.TestCase):
+    def test_each_strategy_counts_its_own_window_scores_and_buys(self):
+        young = pair(mint="YNG", symbol="YNG", age_h=0.3)
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False,
+                        sources=market([young]))
+            desk.scan_cycle()
+            sp = snapshot(desk.store.path)["strategies"]["speed"]["hour"]
+            self.assertEqual(sp["rounds"], 1)
+            b = sp["books"]
+            self.assertEqual((b["s1"]["window_avg"], b["s2"]["window_avg"], b["s3"]["window_avg"]), (2, 1, 1))
+            self.assertEqual((b["s1"]["scored"], b["s2"]["scored"]), (2, 1))
+            self.assertEqual((b["s1"]["bought"], b["s2"]["bought"], b["s3"]["bought"]), (2, 1, 1))
+            desk.log.close()
+            desk.store.close()

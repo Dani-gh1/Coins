@@ -68,6 +68,15 @@ h1 .sub { font-weight: 450; color: var(--muted); }
 .standing .nm span { overflow: hidden; text-overflow: ellipsis; }
 .standing .nm i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
 .standing .ret { font-weight: 700; }
+.speed { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, auto); font-variant-numeric: tabular-nums; margin-top: 10px; }
+.speed > div { padding: 9px 0; border-bottom: 1px solid var(--grid); min-width: 0; }
+.speed .h { color: var(--muted); font-size: 12px; padding-top: 0; }
+.speed .r { text-align: right; padding-left: 14px; white-space: nowrap; }
+.speed .hc { color: var(--c); font-weight: 700; }
+.seg { display: inline-flex; gap: 2px; background: var(--wash); border-radius: 10px; padding: 3px; }
+.seg button { border: 0; background: transparent; border-radius: 8px; padding: 4px 12px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .wrap { max-width: 1200px; margin: 0 auto; padding: 18px max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left)); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 18px 20px; box-shadow: var(--shadow); min-width: 0; }
 .card h2 { margin: 0; font-size: 15px; font-weight: 650; }
@@ -202,12 +211,51 @@ function chartCard(st) {
     box);
 }
 
+let speedSpan = "day";
+function duration(sec) {
+  if (sec == null) return "–";
+  if (sec < 60) return Math.round(sec) + " sek.";
+  if (sec < 3600) return Math.round(sec / 60) + " min.";
+  const hh = Math.floor(sec / 3600), mm = Math.round((sec % 3600) / 60);
+  return hh + " t." + (mm ? " " + mm + " min." : "");
+}
+function speedCard(st) {
+  const sp = st.speed && st.speed[speedSpan];
+  if (!sp) return null;
+  const n0 = (v) => (v == null ? "–" : nf(0).format(v));
+  const rows = [
+    ["I vinduet pr. runde", (b) => (sp.books[b.key].window_avg == null ? "–" : nf(1).format(sp.books[b.key].window_avg))],
+    ["Coins vurderet", (b) => n0(sp.books[b.key].scored)],
+    ["Opfyldte reglerne", (b) => n0(sp.books[b.key].qualified)],
+    ["Købt", (b) => n0(sp.books[b.key].bought)],
+    ["Gns. handelstid", (b) => duration(b.avg_hold_s)],
+  ];
+  const seg = h("div", { class: "seg", role: "group", "aria-label": "Periode" },
+    [["hour", "Seneste time"], ["day", "Seneste døgn"]].map(([k, label]) => {
+      const btn = h("button", { type: "button", "aria-pressed": String(k === speedSpan), text: label });
+      btn.addEventListener("click", () => { speedSpan = k; lastKey = ""; tick(); });
+      return btn;
+    }));
+  const every = st.mark_every_s;
+  return h("section", { class: "card", style: "margin-bottom:16px" },
+    h("div", { class: "card-head" },
+      h("div", null, h("h2", { text: "Hastighed" }),
+        h("p", { class: "sub", text: "Fælles for alle tre: " + n0(sp.rounds) + " scanningsrunder, i gns. "
+          + (sp.round_avg_s == null ? "–" : nf(0).format(sp.round_avg_s) + " sek.") + " pr. runde. Kursen på strategiernes positioner tjekkes "
+          + (every == null ? "hvert 2. sek." : "hvert " + nf(1).format(every) + ". sek. (målt).") })),
+      seg),
+    h("div", { class: "speed" },
+      h("div", { class: "h", text: "" }),
+      st.books.map((b, i) => h("div", { class: "h r hc", style: "--c:" + color(i), text: b.name.replace(" regler", "").replace("Bredt vindue", "Bredt") })),
+      rows.flatMap(([label, f]) => [h("div", { text: label }), ...st.books.map((b) => h("div", { class: "r", text: f(b) }))])));
+}
+
 let lastKey = "";
 function render(state) {
   const st = state.strategies, status = state.status || {};
   $("status").replaceChildren(h("span", { class: "dot" + (status.running ? " on" : "") }),
     h("strong", { text: status.running ? "Kører" : "Stoppet" }));
-  const key = JSON.stringify({ st, running: status.running });
+  const key = JSON.stringify({ st, running: status.running, speedSpan });
   if (key === lastKey) return;
   lastKey = key;
   const main = $("main");
@@ -230,6 +278,7 @@ function render(state) {
     standing,
     h("div", { class: "books" }, st.books.map((b, i) => bookCard(b, i, b.key === lead))),
     chartCard(st),
+    speedCard(st),
     h("section", { class: "card" },
       h("h2", { text: "Sådan måles det" }),
       h("p", { class: "sub", text: "Alle tre strategier får de samme coins og måles ens: købet sker til en rigtig Jupiter-quote af strategiens egen ordrestørrelse, stop og trailing følges på hver kurs, og salget er et estimat (kursen minus den prisvirkning, købet betalte). Afkast er i procent af hver strategis startkonto. Under 20–30 lukkede handler pr. strategi er forskellene mest tilfældigheder." }),

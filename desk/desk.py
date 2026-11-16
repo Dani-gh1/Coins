@@ -127,6 +127,8 @@ class Desk:
         t0 = time.time()
         rep = self.scout.scan()
         self.log.window(rep.candidates)
+        if self.lab:
+            self.lab.new_round(rep.candidates, [c for c, _ in rep.wide or []])
         now = time.time()
         fresh, held, suppressed = [], 0, 0
         for c in rep.candidates:
@@ -212,6 +214,8 @@ class Desk:
         self.log.event("desk", "cycle", stats,
                        line=f"cycle {self.cycle} done in {stats['seconds']}s | equity ${stats['equity']:,.2f} "
                             f"| open {stats['open_positions']} | smart book {stats['smart_wallets']}")
+        if self.lab:
+            self.log.event("strategy", "strategy_round", {"seconds": stats["seconds"], "books": self.lab.end_round()})
         return stats
 
     def _wide(self, wide, stats: dict) -> None:
@@ -252,7 +256,9 @@ class Desk:
 
     def _lab(self, c, score: float, lp, decimals) -> None:
         try:
-            for p in self.lab.consider(c, score, lp, decimals):
+            opened = self.lab.consider(c, score, lp, decimals)
+            self.lab.note(c, score, lp, [p.strategy for p in opened])
+            for p in opened:
                 self.log.event("strategy", "strategy_open", {"strategy": p.strategy, "position_id": p.id, "score": score,
                                                               "impact_pct": p.entry_impact_pct},
                                mint=p.mint, symbol=p.symbol,
