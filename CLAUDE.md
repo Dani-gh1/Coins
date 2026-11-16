@@ -24,18 +24,22 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
 - Dashboardet ligger på `http://127.0.0.1:8787` (dansk UI, 4 faner).
 - Papirbogen gemmes portabelt i `runs/state.json` og gendannes, når databasen er tom.
 - Testene køres med `python3 -m unittest discover -s tests` (47 tests).
-- I cloud-sessioner køres desken i blokke på 2 timer (`--hours 1.95`). Efter hver blok committes
-  `runs/state.json` og dagens rapport. Der arbejdes på branchen `claude/gallant-planck-vsfkxd`.
+- **Desken kører kun på brugerens Mac** (i `~/Coins`), startet med
+  `nohup caffeinate -i python3 -m desk run --dashboard 8787 --host 0.0.0.0 > desk.log 2>&1 &`.
+  Brugeren ser dashboardet på telefonen via Tailscale (`http://100.73.239.46:8787`).
+- **Start ikke desken i cloud-sessioner.** Brugeren vil kun have én papirkonto. Cloud-desken blev
+  stoppet 2026-11-16, fordi containeren lukker ned og to desks giver to konti.
+- Der arbejdes på branchen `claude/gallant-planck-vsfkxd`.
 
 ## Brugerens ønsker (vigtigt)
 - Brugeren skriver dansk, så svar på dansk og kort.
 - Papirpenge vises **altid i procent**, aldrig i dollars. Markedstal (liq, vol, mcap) må stå i $.
 - Rigtige penge og indbetalinger er udskudt ("det venter vi med"). Byg det ikke uopfordret.
-- Brugeren har også en desk kørende på sin egen Mac med sin egen papirkonto. Den er adskilt fra
-  cloud-sessionens konto, så tallene kan være forskellige.
 
-## Status pr. 2026-11-15
-- 3 lukkede handler: CSI (+), WOHAIHAO (+) og bill (−11,1 %). Kontoen står på ca. −0,33 %.
+## Status pr. 2026-11-16
+- 4 lukkede handler: CSI (+), WOHAIHAO (+), bill (−11,1 %) og Socks (ca. −9 %, stop med slippage).
+  Kontoen står på ca. −1,05 %. Macen kører videre fra denne bog (`runs/state.json` på GitHub er
+  cloud-bogen fra 2026-11-16; Macens nye handler ligger kun lokalt på Macen).
 - Datagrundlaget for tærsklen er meget tyndt (én handel over 73 i backtesten), så analysen bør
   køres igen, når der er mere data.
 - Flere datakilder gav ikke flere coins. Markedet er flaskehalsen, og der kommer flest coins
