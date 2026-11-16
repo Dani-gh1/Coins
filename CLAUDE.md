@@ -24,11 +24,16 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
 - Dashboardet ligger på `http://127.0.0.1:8787` (dansk UI, 4 faner).
 - Papirbogen gemmes portabelt i `runs/state.json` og gendannes, når databasen er tom.
 - Testene køres med `python3 -m unittest discover -s tests` (47 tests).
-- **Desken kører kun på brugerens Mac** (i `~/Coins`), startet med
-  `nohup caffeinate -i python3 -m desk run --dashboard 8787 --host 0.0.0.0 > desk.log 2>&1 &`.
-  Brugeren ser dashboardet på telefonen via Tailscale (`http://100.73.239.46:8787`).
-- **Start ikke desken i cloud-sessioner.** Brugeren vil kun have én papirkonto. Cloud-desken blev
-  stoppet 2026-11-16, fordi containeren lukker ned og to desks giver to konti.
+- **Desken kører 24/7 på brugerens Oracle Cloud-server** (Ubuntu 24.04, offentlig IP 89.168.96.169,
+  bruger `ubuntu`, mappe `~/Coins`) som systemd-servicen `desk` (`Restart=always`). Brugeren logger
+  ind fra Macen med `ssh -i ~/.ssh/oracle ubuntu@89.168.96.169`. Opdatering på serveren:
+  `git checkout -- runs/state.json && git pull --ff-only origin claude/gallant-planck-vsfkxd &&
+  sudo systemctl restart desk`. Log: `sudo journalctl -u desk -n 20`.
+- Dashboardet hedder **Moonshot** og ligger som app på brugerens iPhone-hjemmeskærm. Telefonen
+  når serveren via Tailscale (serverens `100.x`-IP, port 8787). Oracle-firewallen åbner kun for
+  `tailscale0`.
+- **Start ikke desken i cloud-sessioner eller på Macen.** Brugeren vil kun have én papirkonto, og
+  den ligger på serveren. Serverens nye handler ligger i dens database, ikke på GitHub.
 - Der arbejdes på branchen `claude/gallant-planck-vsfkxd`.
 
 ## Brugerens ønsker (vigtigt)
