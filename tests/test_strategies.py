@@ -99,7 +99,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -204,5 +204,22 @@ class Strategy5Tests(unittest.TestCase):
             s5 = next(b for b in desk.lab.books if b.r.key == "s5")
             p = next(iter(s5.open.values()))
             self.assertLessEqual(p.entry_impact_pct, 0.5)
+            desk.log.close()
+            desk.store.close()
+
+
+class Strategy6Tests(unittest.TestCase):
+    def test_picky_needs_score_76_and_a_deep_pool(self):
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=market())
+            src = desk.src
+            for m in ("A", "B", "C"):
+                src.jup.tokens_[m], src.jup.price[m] = jup_token(m), 0.001
+            buyers = lambda c, score: {p.strategy for p in desk.lab.consider(c, score, 100.0, 6)}   # noqa: E731
+            self.assertNotIn("s6", buyers(candidate(mint="A", symbol="A"), 75.0))
+            self.assertIn("s6", buyers(candidate(mint="B", symbol="B"), 76.0))
+            self.assertNotIn("s6", buyers(candidate(mint="C", symbol="C", liq=80_000, mcap=800_000), 90.0))
+            s6 = next(b for b in desk.lab.books if b.r.key == "s6")
+            self.assertEqual((s6.r.trail_trigger_pct, s6.r.trail_distance_pct, s6.r.impact_cap_pct), (15, 10, 0.5))
             desk.log.close()
             desk.store.close()

@@ -7,6 +7,7 @@ virtual account, so they can be compared fairly from the same start.
                        cap, no position cap, LP >= 90%, trailing stop from +12%
   4  Længere trailing  strategy 2, but the trailing stop arms at +15% and trails 10% under the high
   5  Dybe pools        strategy 2, but only pools with $100k+ liquidity and at most 0.5% price impact
+  6  Kræsen            score >= 76, $100k+ liquidity, at most 0.5% impact, trailing from +15% / 10%
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -97,6 +98,16 @@ STRATEGIES = (
             "Alt andet": ["Præcis som strategi 2 (vindue, filtre, score 73, 1 %, højst 3 åbne, trailing +8 %/6 %)"],
             "Filter": ["Likviditet mindst $100k (i stedet for $40k)"],
             "Executor": ["Prisvirkning højst 0,5 % (i stedet for 1,0 %)", "Billigere handler, færre coins"],
+        }), min_liq_usd=100_000),
+    StrategyRules(
+        "s6", "Kræsen", 30, 72, 300_000, 20_000_000, 95, 76, 1.0, 0.5, 3, 120, 6, 15, 10,
+        _rules({
+            "Idé": ["Kun de stærkeste coins, billigt købt, og vinderne får plads"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2, men likviditet mindst $100k"],
+            "Analyst": ["Køber ved score 76 eller mere"],
+            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 0,5 %", "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen"],
         }), min_liq_usd=100_000),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
