@@ -29,7 +29,7 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
   ind fra Macen med `ssh -i ~/.ssh/oracle ubuntu@89.168.96.169`. Opdatering på serveren:
   `git checkout -- runs/state.json && git pull --ff-only origin claude/gallant-planck-vsfkxd &&
   sudo systemctl restart desk`. Log: `sudo journalctl -u desk -n 20`.
-- Dashboardet hedder **Nova** (hed før Moonshot) og ligger som app på brugerens iPhone-hjemmeskærm. Telefonen
+- Dashboardet hedder **Nova AI** (hed før Moonshot) og ligger som app på brugerens iPhone-hjemmeskærm. Telefonen
   når serveren via Tailscale (serverens `100.x`-IP, port 8787). Oracle-firewallen åbner kun for
   `tailscale0`.
 - **Start ikke desken i cloud-sessioner eller på Macen.** Brugeren vil kun have én papirkonto, og
