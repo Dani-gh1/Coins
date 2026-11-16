@@ -47,6 +47,14 @@ CREATE TABLE IF NOT EXISTS scan_window (
     mint TEXT PRIMARY KEY, symbol TEXT, name TEXT, pair_address TEXT, dex_id TEXT,
     age_h REAL, mcap REAL, liq REAL, vol_h1 REAL, pc_h1 REAL, pc_m5 REAL, price REAL, ts REAL
 );
+CREATE TABLE IF NOT EXISTS shadow_positions (
+    id TEXT PRIMARY KEY, mint TEXT NOT NULL, symbol TEXT, pair_address TEXT, kind TEXT, score REAL,
+    opened_ts REAL, entry_price REAL, entry_impact_pct REAL, stake_usd REAL, stop_price REAL,
+    high_price REAL, trail_active INTEGER, trail_trigger_price REAL, trail_distance_pct REAL,
+    last_price REAL, last_price_ts REAL, status TEXT, closed_ts REAL, exit_price REAL,
+    exit_reason TEXT, pnl_pct REAL
+);
+CREATE INDEX IF NOT EXISTS shadow_mint ON shadow_positions(mint, closed_ts);
 CREATE TABLE IF NOT EXISTS smart_wallets (
     wallet TEXT PRIMARY KEY, source TEXT, wins INTEGER, losses INTEGER,
     realized_usd REAL, added_ts REAL, updated_ts REAL

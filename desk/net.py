@@ -30,6 +30,9 @@ HOST_RPM = {
     "api.jup.ag": 36,
     "api.mainnet-beta.solana.com": 100,
 }
+SHADOW_RPM = {
+    "api.dexscreener.com": 20,     # shadow marks every few seconds (all shadows in one or two calls)
+}
 RISK_RPM = {
     "api.dexscreener.com": 90,     # one mark request per risk tick (all positions in one call)
     "lite-api.jup.ag": 10,         # sell quotes for exits, and a price fallback

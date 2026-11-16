@@ -310,6 +310,7 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
     }
 
     return {
+        "shadow": _shadow(q, now, min_score),
         "speed": _speed(q, now),
         "runs": _runs(q, now),
         "status": {
@@ -340,6 +341,42 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
         "top_scores": top_scores,
         "activity": activity,
     }
+
+
+SHADOW_THRESHOLDS = (0, 60, 65, 70, 73, 80)
+
+
+def _shadow(q, now: float, min_score: float) -> dict | None:
+    """The shadow book (desk/shadow.py): how every scored coin would have done under the real
+    rules, grouped as 'what if the threshold had been X'. All results in percent of the stake."""
+    if not q("SELECT 1 FROM sqlite_master WHERE type='table' AND name='shadow_positions'"):
+        return None
+    rows = [dict(r) for r in q("SELECT * FROM shadow_positions ORDER BY opened_ts DESC")]
+    if not rows:
+        return {"first_ts": None, "open": 0, "closed": 0, "thresholds": [], "pumped": None, "recent": []}
+    closed = [r for r in rows if r["status"] == "closed"]
+
+    def stats(group: list[dict]) -> dict:
+        n = len(group)
+        wins = sum(1 for r in group if (r["pnl_pct"] or 0) > 0)
+        return {"n": n, "wins": wins,
+                "win_rate": wins / n * 100 if n else None,
+                "avg_pct": sum(r["pnl_pct"] or 0 for r in group) / n if n else None,
+                "best_pct": max((r["pnl_pct"] or 0 for r in group), default=None),
+                "worst_pct": min((r["pnl_pct"] or 0 for r in group), default=None)}
+
+    scored = [r for r in closed if r["kind"] == "scored" and r["score"] is not None]
+    thresholds = [{"min": t, "current": t == min_score, **stats([r for r in scored if r["score"] >= t])}
+                  for t in sorted(set(SHADOW_THRESHOLDS) | {min_score})]
+    pumped = [r for r in closed if r["kind"] == "pumped"]
+    recent = [{k: r[k] for k in ("symbol", "mint", "pair_address", "kind", "score", "opened_ts", "closed_ts",
+                                 "status", "exit_reason", "pnl_pct")}
+              | {"open_pct": ((r["last_price"] or 0) * (1 - (r["entry_impact_pct"] or 0) / 100)
+                              / r["entry_price"] - 1) * 100 if r["status"] == "open" and r["entry_price"] else None}
+              for r in rows[:15]]
+    return {"first_ts": min(r["opened_ts"] for r in rows), "open": len(rows) - len(closed), "closed": len(closed),
+            "thresholds": thresholds, "pumped": stats(pumped) if pumped else None, "recent": recent,
+            "stale": sum(1 for r in closed if r["exit_reason"] == "stale_price")}
 
 
 def _speed(q, now: float) -> dict:

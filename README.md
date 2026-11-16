@@ -64,6 +64,18 @@ the swaps the desk observes. Until the book holds 10 wallets, the smart-wallet c
 marked unavailable on the scorecard and its weight is spread over the other five. You can
 seed wallets you trust in `data/smart_wallets.txt`.
 
+## Shadow trading
+
+The real desk buys a coin or two a day, so it takes months to learn whether the threshold and
+the filters are right. The shadow book (`desk/shadow.py`) pretends to buy every coin that gets a
+score, also below 73, and every coin the Filter killed only for "+80% in 1h". It follows each
+one with the real rules (stop −6% from the fill, trailing from +8%, 120 min before the same coin
+again) and records the result. The entry is a real Jupiter quote of the size a real order would
+have. The exit is the mark minus the impact the buy paid, which is an estimate. It runs in its own
+thread with its own HTTP client, never delays a real stop and never touches the paper account.
+It ignores the 3-position cap on purpose. The dashboard's Handler tab shows "what if the
+threshold had been X". Switch it off with `[shadow] enabled = false`.
+
 ## Run it
 
 Python ≥ 3.11, standard library only. No API keys needed. On macOS and most Linux systems the
@@ -76,7 +88,7 @@ python3 -m desk once                           # a single scan cycle
 python3 -m desk report --run-id night1         # P&L, trades, kill table, top scores
 python3 -m desk dashboard                      # web dashboard on http://127.0.0.1:8787
 python3 -m desk run --hours 10 --dashboard 8787   # desk and dashboard in one process
-python3 -m unittest discover -s tests -t .     # 59 offline tests
+python3 -m unittest discover -s tests -t .     # 64 offline tests
 ```
 
 ### Dashboard

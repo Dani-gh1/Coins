@@ -28,8 +28,9 @@ from .agents.scout import Scout
 from .config import DeskConfig
 from .dashboard import equity_points
 from .messages import Deferral, ExitSignal, Kill, ScoreCard
+from .shadow import ShadowBook, shadow_line, shadow_payload
 from .smart_wallets import SmartWalletBook
-from .net import RISK_RPM, Http
+from .net import RISK_RPM, SHADOW_RPM, Http
 from .sources import Sources
 from .store import Store
 
@@ -54,6 +55,10 @@ class Desk:
         self.analyst = Analyst(cfg.analyst, self.src, self.book)
         self.risk = Risk(cfg.risk, cfg.analyst)
         self.executor = Executor(cfg.executor, self.src, self.store, self.risk, exit_sources=self.risk_src)
+        # Shadow trading (see desk/shadow.py): its own client and thread, so it never slows a real stop.
+        self.shadow_src = sources or Sources(Http(timeout=6.0, retries=1, rpm=SHADOW_RPM))
+        self.shadow = ShadowBook(cfg.shadow, cfg.risk, self.store, self.executor,
+                                 cfg.executor.reentry_cooldown_minutes, cfg.executor.tx_cost_usd)
         self.stop_event = threading.Event()
         now = time.time()
         self.recheck_at: dict[str, float] = {
@@ -130,10 +135,15 @@ class Desk:
 
         stats = {"killed_filter": 0, "passed_filter": 0, "scored": 0, "passed_analyst": 0,
                  "deferred": 0, "entered": 0}
+        by_mint = {c.mint: c for c in fresh}
+        pumped = []                     # shadowed after the loop, so no shadow quote delays a real buy
         for result in self.filter.evaluate(fresh):
             if isinstance(result, Kill):
                 self._kill(result)
                 stats["killed_filter"] += 1
+                if (self.cfg.shadow.include_pumped and result.stage == "filter" and result.reasons
+                        and all(r.startswith("already_pumped") for r in result.reasons)):
+                    pumped.append(by_mint.get(result.mint))
                 continue
             stats["passed_filter"] += 1
             self.log.filter_pass(result)
@@ -144,21 +154,24 @@ class Desk:
                 continue
             stats["scored"] += 1
             self.log.scorecard(card)
-            if not card.passed:
-                self._kill(self._analyst_kill(card))
-                continue
-            stats["passed_analyst"] += 1
-            plan = self.risk.plan(card)
-            self.log.risk_plan(plan)
-            if not plan.approved:
-                continue
-            outcome = self.executor.enter(plan)
-            if isinstance(outcome, Kill):
-                self._kill(outcome)
+            if card.passed:
+                stats["passed_analyst"] += 1
+                plan = self.risk.plan(card)
+                self.log.risk_plan(plan)
+                if plan.approved:
+                    outcome = self.executor.enter(plan)
+                    if isinstance(outcome, Kill):
+                        self._kill(outcome)
+                    else:
+                        self.log.fill(*outcome)
+                        stats["entered"] += 1
             else:
-                self.log.fill(*outcome)
-                stats["entered"] += 1
+                self._kill(self._analyst_kill(card))
+            # The shadow buy comes after the real one, so its quote never delays a real order.
+            self._shadow(result.candidate, "scored", card.score, (result.jupiter or {}).get("decimals"))
 
+        for c in pumped:
+            self._shadow(c, "pumped", None, None)
         self._learn()
         self.save_state()
         stats.update(cycle=self.cycle, seconds=round(time.time() - t0, 1),
@@ -168,6 +181,56 @@ class Desk:
                        line=f"cycle {self.cycle} done in {stats['seconds']}s | equity ${stats['equity']:,.2f} "
                             f"| open {stats['open_positions']} | smart book {stats['smart_wallets']}")
         return stats
+
+    def _shadow(self, c, kind: str, score: float | None, decimals: int | None) -> None:
+        if c is None or not self.shadow.wants(c.mint):
+            return
+        try:
+            if decimals is None:
+                info = self.src.rpc.mint_info(c.mint)
+                decimals = info["decimals"] if info else None
+            pos = self.shadow.consider(c, kind, score, decimals)
+        except Exception as e:  # a measurement must never break the scan
+            self.log.event("shadow", "error", {"error": repr(e)}, mint=c.mint, symbol=c.symbol)
+            return
+        if pos:
+            self.log.event("shadow", "shadow_open", shadow_payload(pos), mint=pos.mint, symbol=pos.symbol,
+                           line=shadow_line(pos))
+
+    def shadow_tick(self) -> None:
+        positions = self.shadow.open_positions()
+        if not positions:
+            return
+        marks: dict[str, float] = {}
+        want = {p.mint: p.pair_address for p in positions}
+        best: dict[str, tuple[float, float]] = {}
+        for pair in self.shadow_src.dex.pairs_for_tokens(list(want)):
+            mint = (pair.get("baseToken") or {}).get("address")
+            try:
+                price = float(pair.get("priceUsd") or 0)
+            except (TypeError, ValueError):
+                continue
+            if mint not in want or price <= 0:
+                continue
+            if pair.get("pairAddress") == want[mint]:
+                marks[mint] = price
+            else:
+                liq = float((pair.get("liquidity") or {}).get("usd") or 0)
+                if liq > best.get(mint, (-1.0, 0.0))[0]:
+                    best[mint] = (liq, price)
+        for mint, (_, price) in best.items():
+            marks.setdefault(mint, price)
+        for pos in self.shadow.tick(marks, self.risk):
+            self.log.event("shadow", "shadow_close", shadow_payload(pos), mint=pos.mint, symbol=pos.symbol,
+                           line=shadow_line(pos))
+
+    def _shadow_loop(self) -> None:
+        while not self.stop_event.is_set():
+            try:
+                self.shadow_tick()
+            except Exception as e:  # never let the measurement die, never let it touch the real book
+                self.log.event("shadow", "error", {"error": repr(e)}, line=f"shadow error: {e!r}")
+            self.stop_event.wait(self.cfg.shadow.poll_seconds)
 
     def _analyst_kill(self, card: ScoreCard) -> Kill:
         c = card.candidate
@@ -299,6 +362,10 @@ class Desk:
                        line=f"run {self.run_id} starting (paper) equity ${self.executor.equity():,.2f}")
         risk_thread = threading.Thread(target=self._risk_loop, name="risk", daemon=True)
         risk_thread.start()
+        shadow_thread = None
+        if self.cfg.shadow.enabled:
+            shadow_thread = threading.Thread(target=self._shadow_loop, name="shadow", daemon=True)
+            shadow_thread.start()
         try:
             while not self.stop_event.is_set():
                 started = time.time()
@@ -320,6 +387,8 @@ class Desk:
         finally:
             self.stop_event.set()
             risk_thread.join(timeout=30)
+            if shadow_thread:
+                shadow_thread.join(timeout=15)
             self.save_state()
             self.store.set_account("last_seen", time.time())
             self.store.set_account("clean_stop", True)

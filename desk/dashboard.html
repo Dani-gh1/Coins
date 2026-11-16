@@ -246,6 +246,13 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .hourbars .b { background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; outline: none; }
 .hourbars .b.none { background: var(--grid); }
 .hourbars .b:hover, .hourbars .b:focus-visible { background: var(--ink-2); }
+.tgrid { display: grid; gap: 0; font-variant-numeric: tabular-nums; }
+.tgrid > div { padding: 9px 0; border-bottom: 1px solid var(--grid); min-width: 0; }
+.tgrid .h { color: var(--muted); font-size: 12px; padding-top: 0; }
+.tgrid .r { text-align: right; padding-left: 14px; white-space: nowrap; }
+.tgrid .cur { font-weight: 700; }
+.tgrid4 { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.tgrid3 { grid-template-columns: minmax(0, 1fr) auto auto; }
 .hourlabels { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; margin-top: 4px; color: var(--muted); font-size: 10.5px; text-align: center; }
 
 .feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -775,6 +782,40 @@ function testCard(state) {
           h("span", { class: "why", text: c.why }))))));
 }
 
+function shadowCard(state) {
+  const sh = state.shadow;
+  if (!sh) return null;
+  if (!sh.first_ts) return card("Skyggehandel", "Desken lader som om, den køber hver coin, der får en score – også under tærsklen – og følger den med de rigtige regler. Ingen penge flyttes.",
+    h("div", { class: "empty", text: "Ingen skyggehandler endnu. De første kommer, når desken scorer en coin." }));
+  const f = (v, d = 0) => (v == null ? "–" : num(v, d));
+  const res = (v) => (v == null ? "–" : pct(v));
+  const head = (...xs) => xs.map((x, i) => h("div", { class: "h" + (i ? " r" : ""), text: x }));
+  const rowOf = (label, st, cur) => [
+    h("div", { class: cur ? "cur" : "", text: label }),
+    h("div", { class: "r" + (cur ? " cur" : ""), text: f(st.n) }),
+    h("div", { class: "r" + (cur ? " cur" : ""), text: st.win_rate == null ? "–" : share(st.win_rate, 0) }),
+    h("div", { class: "r" + (cur ? " cur" : "") }, st.avg_pct == null ? "–" : delta(st.avg_pct, pct(st.avg_pct)))];
+  const table = h("div", { class: "tgrid tgrid4" },
+    head("Tærskel", "Handler", "Vundne", "Gns."),
+    sh.thresholds.flatMap((t) => rowOf((t.min === 0 ? "Alle scorede" : "Score ≥ " + num(t.min)) + (t.current ? " (nu)" : ""), t, t.current)),
+    sh.pumped ? rowOf("Afvist: pumpet", sh.pumped, false) : []);
+  const recent = h("div", { class: "tgrid tgrid3", style: "margin-top:22px" },
+    head("Seneste skyggehandler", "Score", "Resultat"),
+    sh.recent.flatMap((r) => [
+      h("div", null, h("span", { class: "strong", text: r.symbol || "?" }), h("span", { class: "note", text: "  " + when(r.opened_ts) })),
+      h("div", { class: "r", text: r.kind === "pumped" ? "pumpet" : f(r.score) }),
+      h("div", { class: "r" }, r.status === "open"
+        ? h("span", { class: "note", text: "åben " + (r.open_pct == null ? "" : pct(r.open_pct)) })
+        : delta(r.pnl_pct, pct(r.pnl_pct) + (r.exit_reason === "stale_price" ? " (ingen kurs)" : "")))]));
+  return card("Skyggehandel",
+    "Desken lader som om, den køber hver coin, der får en score – også under tærsklen – og følger den med de rigtige regler (stop, trailing, karantæne). "
+      + "Ingen penge flyttes, og papirkontoen påvirkes ikke. Procent er af indsatsen. Salget er et estimat. Siden " + when(sh.first_ts)
+      + " · " + num(sh.closed) + " lukkede · " + num(sh.open) + " åbne.",
+    h("div", null, table,
+      h("div", { class: "note", style: "margin-top:10px", text: "Brug tabellen til at sammenligne tærskler med hinanden, når der er mindst 20–30 handler i en række. Færre end det er mest tilfældighed." }),
+      recent));
+}
+
 function statsCard(state) {
   const st = tradeStats(state);
   if (!st) return null;
@@ -1084,7 +1125,7 @@ function render(state) {
   main.replaceChildren(
     panel("overblik", heroCard(state), kpis(state), testCard(state), chartCard(state), openCard(state),
       h("div", { class: "grid2" }, daysCard(state), activityCard(state, 7))),
-    panel("handler", statsCard(state), openCard(state), closedCard(state, 50)),
+    panel("handler", statsCard(state), shadowCard(state), openCard(state), closedCard(state, 50)),
     panel("marked", windowCard(state), h("div", { class: "grid2" }, funnelCard(state), killsCard(state)),
       h("div", { class: "grid2" }, scoresCard(state), recentKillsCard(state))),
     panel("desk", speedCard(state), healthCard(state), runsCard(state), rulesCard(state), activityCard(state, 25)));

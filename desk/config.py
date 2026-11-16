@@ -93,6 +93,16 @@ class RiskConfig:
 
 
 @dataclass
+class ShadowConfig:
+    # Shadow trading (desk/shadow.py): follow every scored coin as if it had been bought, with
+    # the real rules, to learn which scores and filters pay. Never touches the paper account.
+    enabled: bool = True
+    include_pumped: bool = True               # also coins the Filter only killed for +80% in 1h
+    max_open: int = 40
+    poll_seconds: float = 5.0                 # how often shadow positions are marked
+
+
+@dataclass
 class DeskConfig:
     scan_interval_seconds: float = 20.0
     data_dir: str = "runs"
@@ -107,6 +117,7 @@ class DeskConfig:
     analyst: AnalystConfig = field(default_factory=AnalystConfig)
     executor: ExecutorConfig = field(default_factory=ExecutorConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
+    shadow: ShadowConfig = field(default_factory=ShadowConfig)
 
 
 def _apply(obj, overrides: dict, path: str = "") -> None:

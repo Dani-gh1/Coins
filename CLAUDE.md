@@ -18,12 +18,15 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
 - Risk: stop −6 % under indgang, trailing stop slås til ved +8 % og ligger 6 % under toppen.
   Kursen tjekkes hvert sekund.
 - Alle tærskler står i `desk/config.py`.
+- Skyggehandel (`desk/shadow.py`, fra 2026-11-16): følger hver scoret coin (også under 73) og
+  coins afvist kun for +80 % med de rigtige regler, uden at røre papirkontoen. Bruges til at vælge
+  tærskel og filtre med mere data. Vises under fanen Handler.
 
 ## Sådan køres den
 - `python3 -m desk run --dashboard 8787` (brug `python3`, ikke `python`, på brugerens Mac).
 - Dashboardet ligger på `http://127.0.0.1:8787` (dansk UI, 4 faner).
 - Papirbogen gemmes portabelt i `runs/state.json` og gendannes, når databasen er tom.
-- Testene køres med `python3 -m unittest discover -s tests` (59 tests).
+- Testene køres med `python3 -m unittest discover -s tests` (64 tests).
 - **Desken kører 24/7 på brugerens Oracle Cloud-server** (Ubuntu 24.04, offentlig IP 89.168.96.169,
   bruger `ubuntu`, mappe `~/Coins`) som systemd-servicen `desk` (`Restart=always`). Brugeren logger
   ind fra Macen med `ssh -i ~/.ssh/oracle ubuntu@89.168.96.169`. Opdatering på serveren:
