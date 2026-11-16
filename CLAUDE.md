@@ -71,3 +71,10 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
   køres igen, når der er mere data.
 - Flere datakilder gav ikke flere coins. Markedet er flaskehalsen, og der kommer flest coins
   omkring kl. 03–07 dansk tid.
+- Sidst på dagen 2026-11-16: 17 strategier startet samtidig (epoch `2026-11-16-17strategier`). Brugeren
+  lader dem køre 1–2 uger uden ændringer. Derefter: evaluér strategierne og skyggehandlen sammen med
+  brugeren (mindst 20–30 lukkede handler pr. strategi før konklusioner), og skift dashboardet tilbage,
+  når brugeren siger til. Claudes forudsigelser var svagt negative for de fleste; kun 6, 10–13, 15, 16
+  svagt positive, og kun fordi de satser mere.
+- Udestående for brugeren: nyt ntfy-kanalnavn og ny Jupiter-nøgle (begge har stået i chatten) og en
+  kopi af backuppen væk fra serveren (`~/backup`, daglig kl. 04).
