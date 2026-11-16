@@ -100,7 +100,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -293,5 +293,48 @@ class Strategy8And9Tests(unittest.TestCase):
             desk.shadow_tick()
             r = desk.store.query("SELECT exit_reason FROM strategy_positions WHERE strategy='s9'")[0]
             self.assertEqual(r["exit_reason"], "time_stop")
+            desk.log.close()
+            desk.store.close()
+
+
+class Strategy10Tests(unittest.TestCase):
+    def test_sharper_picky_rules_and_three_percent_stake(self):
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=market())
+            src = desk.src
+            src.jup.impact_fn = lambda usd: usd / 1000          # $300 -> 0.3% impact, bigger orders cost more
+            s10 = next(b for b in desk.lab.books if b.r.key == "s10")
+            ok = {"lp_locked_pct": 100.0, "top10_pct": 15.0, "dev_pct": 1.0, "bundle_pct": 2.0}
+
+            def coin(m, **kw):
+                src.jup.tokens_[m], src.jup.price[m] = jup_token(m), 0.001
+                return candidate(mint=m, symbol=m, **kw)
+            self.assertIsNone(s10.consider(coin("THIN", liq=120_000, mcap=1_200_000), 80.0, ok, 6))
+            self.assertIsNone(s10.consider(coin("LATE", liq=200_000, mcap=2_000_000, pc_h1=45.0), 80.0, ok, 6))
+            p = s10.consider(coin("DEEP", liq=200_000, mcap=2_000_000), 80.0, ok, 6)
+            self.assertIsNotNone(p)
+            self.assertLessEqual(p.entry_impact_pct, 0.3)
+            self.assertAlmostEqual(p.cost_usd / 10_000 * 100, 3.0, delta=0.01)   # 3% plus the $0.05 fee
+            desk.log.close()
+            desk.store.close()
+
+
+class Strategy11Tests(unittest.TestCase):
+    def test_double_stake_and_pause_after_two_losses(self):
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False, sources=market())
+            src = desk.src
+            src.jup.impact_fn = lambda usd: usd / 3000           # $600 -> 0.2% impact
+            s11 = next(b for b in desk.lab.books if b.r.key == "s11")
+            ok = {"lp_locked_pct": 100.0, "top10_pct": 15.0, "dev_pct": 1.0, "bundle_pct": 2.0}
+
+            def coin(m):
+                src.jup.tokens_[m], src.jup.price[m] = jup_token(m), 0.001
+                return candidate(mint=m, symbol=m, liq=200_000, mcap=2_000_000)
+            for m in ("L1", "L2"):
+                p = s11.consider(coin(m), 80.0, ok, 6)
+                self.assertAlmostEqual(p.cost_usd / s11.equity() * 100, 6.0, delta=0.6)
+                s11._close(p, p.entry_price * 0.9, "stop_loss", time.time())
+            self.assertIsNone(s11.consider(coin("NEXT"), 90.0, ok, 6))     # paused for 24 h
             desk.log.close()
             desk.store.close()

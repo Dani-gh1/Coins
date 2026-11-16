@@ -13,6 +13,9 @@ virtual account, so they can be compared fairly from the same start.
   8  Aggressiv         aims at 1% a day: wide window, score >= 65, 10% stake, 6 open, 30 min cooldown,
                        stop -8%, trailing from +20% / 12%
   9  Hurtig gevinst    strategy 2 plus a +12% take-profit and a 2-hour time stop
+  10 Kræsen+           strategy 6 sharpened: $150k+ liquidity, 0.3% impact, at most +40% in 1h,
+                       top 10 <= 20%, bundles <= 5%, 3% stake
+  11 Kræsen+ stor      strategy 10 with a 6% stake and a 24 h pause after 2 losses in a row
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -159,6 +162,27 @@ STRATEGIES = (
             "Risk": ["Stop −6 %, trailing fra +8 %, 6 % under toppen",
                      "Sælger ved +12 % (gevinstmål)", "Sælger efter 2 timer, hvis intet andet er sket"],
         }), take_profit_pct=12.0, max_hold_minutes=120),
+    StrategyRules(
+        "s10", "Kræsen+", 30, 72, 300_000, 20_000_000, 95, 76, 3.0, 0.3, 3, 120, 6, 15, 10,
+        _rules({
+            "Idé": ["Strategi 6 skærpet: endnu billigere handler, ikke for sent ind, og 3 % indsats"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Likviditet mindst $150k", "Højst +40 % på 1 time (ikke for sent ind)",
+                       "Top 10 ≤ 20 %, bundtede ≤ 5 %"],
+            "Analyst": ["Køber ved score 76 eller mere"],
+            "Executor": ["3 % af kontoen pr. handel", "Prisvirkning højst 0,3 %", "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen"],
+        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5),
+    StrategyRules(
+        "s11", "Kræsen+ stor", 30, 72, 300_000, 20_000_000, 95, 76, 6.0, 0.3, 3, 120, 6, 15, 10,
+        _rules({
+            "Idé": ["Strategi 10 med dobbelt indsats, og en pause når det går dårligt"],
+            "Alt andet": ["Som strategi 10: likviditet ≥ $150k, prisvirkning ≤ 0,3 %, højst +40 % på 1 t.,",
+                          "top 10 ≤ 20 %, bundtede ≤ 5 %, score ≥ 76, trailing +15 %/10 %, stop −6 %"],
+            "Executor": ["6 % af kontoen pr. handel", "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Pause i 24 t. efter 2 tab i træk"],
+        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
+        pause_after_losses=2, pause_hours=24),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 
