@@ -238,6 +238,15 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .check .t { font-weight: 600; }
 .check .v { font-weight: 680; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .check .why { grid-column: 2 / -1; color: var(--ink-2); font-size: 12.5px; }
+.speed-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0; font-variant-numeric: tabular-nums; }
+.speed-grid > div { padding: 9px 0; border-bottom: 1px solid var(--grid); }
+.speed-grid .h { color: var(--muted); font-size: 12px; padding-top: 0; }
+.speed-grid .r { text-align: right; font-weight: 600; padding-left: 18px; }
+.hourbars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; align-items: end; height: 90px; margin-top: 18px; }
+.hourbars .b { background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; outline: none; }
+.hourbars .b.none { background: var(--grid); }
+.hourbars .b:hover, .hourbars .b:focus-visible { background: var(--ink-2); }
+.hourlabels { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; margin-top: 4px; color: var(--muted); font-size: 10.5px; text-align: center; }
 
 .feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .feed li { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px; font-size: 13px; align-items: baseline; }
@@ -932,6 +941,43 @@ function rulesCard(state) {
         li("Tjekker kursen hvert ", b(num(rk.poll_seconds) + ". sekund"))])));
 }
 
+function speedCard(state) {
+  const sp = state.speed;
+  if (!sp) return null;
+  const H = sp.hour, D = sp.day;
+  const f = (v, d = 0) => (v == null ? "–" : num(v, d));
+  const rows = [
+    ["Scanningsrunder", f(H.rounds), f(D.rounds)],
+    ["Gns. tid pr. runde", H.avg_round_s == null ? "–" : f(H.avg_round_s) + " sek.", D.avg_round_s == null ? "–" : f(D.avg_round_s) + " sek."],
+    ["Coins tjekket (alle runder lagt sammen)", f(H.coin_checks), f(D.coin_checks)],
+    ["Gns. coins i vinduet pr. runde", f(H.avg_in_window, 1), f(D.avg_in_window, 1)],
+    ["Forskellige coins sendt til Filter", f(H.evaluated), f(D.evaluated)],
+    ["… kom gennem Filter", f(H.passed_filter), f(D.passed_filter)],
+    ["… fik en score", f(H.scored), f(D.scored)],
+    ["… blev købt", f(H.bought), f(D.bought)],
+  ];
+  const max = Math.max(1, ...sp.hours.map((x) => x.avg_in_window || 0));
+  const bars = h("div", { class: "hourbars" }, sp.hours.map((x) => {
+    const v = x.avg_in_window, hr = new Date(x.ts * 1000).getHours();
+    const b = h("div", { class: "b" + (v ? "" : " none"), tabindex: "0", style: "height:" + (v ? Math.max(3, v / max * 100) : 2) + "%",
+      "aria-label": "Kl. " + pad(hr) + ": " + (v == null ? "ingen scanning" : num(v, 1) + " coins i vinduet i gennemsnit") });
+    tipTarget(b, "Kl. " + pad(hr) + "–" + pad((hr + 1) % 24),
+      v == null ? ["Ingen scanning"] : [num(v, 1) + " coins i vinduet i gns.", num(x.evaluated) + " sendt til Filter", num(x.rounds) + " runder"]);
+    return b;
+  }));
+  const labels = h("div", { class: "hourlabels" }, sp.hours.map((x, i) => {
+    const hr = new Date(x.ts * 1000).getHours();
+    return h("span", { text: i % 3 === 0 ? pad(hr) : "" });
+  }));
+  return card("Hastighed", "Hvor meget desken når. Coins tjekket tæller hver coin én gang pr. runde.",
+    h("div", null,
+      h("div", { class: "speed-grid" },
+        h("div", { class: "h", text: "" }), h("div", { class: "h r", text: "Seneste time" }), h("div", { class: "h r", text: "Seneste døgn" }),
+        rows.flatMap(([k, a, b]) => [h("div", { text: k }), h("div", { class: "r", text: a }), h("div", { class: "r", text: b })])),
+      h("div", { class: "note", style: "margin-top:18px", text: "Coins i vinduet time for time, seneste døgn (din tid)" }),
+      bars, labels));
+}
+
 function healthCard(state) {
   const st = state.status, hl = state.health || {}, a = state.account, r = state.rules;
   const need = r ? r.analyst.min_smart_wallet_book : null;
@@ -1041,7 +1087,7 @@ function render(state) {
     panel("handler", statsCard(state), openCard(state), closedCard(state, 50)),
     panel("marked", windowCard(state), h("div", { class: "grid2" }, funnelCard(state), killsCard(state)),
       h("div", { class: "grid2" }, scoresCard(state), recentKillsCard(state))),
-    panel("desk", healthCard(state), runsCard(state), rulesCard(state), activityCard(state, 25)));
+    panel("desk", speedCard(state), healthCard(state), runsCard(state), rulesCard(state), activityCard(state, 25)));
   selectTab(activeTab);
   $("foot").textContent = "Papirhandel: ingen rigtige penge er i spil. Siden opdaterer sig selv hvert 5. sekund.";
 }

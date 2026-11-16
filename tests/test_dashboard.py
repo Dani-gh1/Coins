@@ -27,6 +27,18 @@ class SnapshotTests(unittest.TestCase):
     def test_missing_database_is_an_empty_state(self):
         self.assertTrue(snapshot(Path(self.tmp.name) / "nope.db")["empty"])
 
+    def test_speed_counts_rounds_and_coins(self):
+        self.desk.scan_cycle()
+        self.desk.scan_cycle()
+        sp = snapshot(self.db)["speed"]
+        for span in (sp["hour"], sp["day"]):
+            self.assertEqual(span["rounds"], 2)
+            self.assertEqual(span["coin_checks"], 6)          # 3 coins seen in each of 2 rounds
+            self.assertEqual(span["evaluated"], 3)
+            self.assertEqual(span["bought"], 1)
+        self.assertEqual(len(sp["hours"]), 24)
+        self.assertEqual(sum(x["rounds"] for x in sp["hours"]), 2)
+
     def test_open_position_then_closed_trade(self):
         self.desk.scan_cycle()
         snap = snapshot(self.db)

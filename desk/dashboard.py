@@ -310,6 +310,7 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
     }
 
     return {
+        "speed": _speed(q, now),
         "runs": _runs(q, now),
         "status": {
             "running": bool(span["b"]) and now - span["b"] < RUNNING_WITHIN_S,
@@ -339,6 +340,41 @@ def _read(conn: sqlite3.Connection, min_score: float, now: float) -> dict:
         "top_scores": top_scores,
         "activity": activity,
     }
+
+
+def _speed(q, now: float) -> dict:
+    """How fast the desk works: scan rounds, coins checked and how far they got, over the last
+    hour and day, plus an hour-by-hour view of the last 24 h (coins in the window, rounds)."""
+    def span(seconds: float) -> dict:
+        since = now - seconds
+        cyc = q("SELECT COUNT(*) AS n, AVG(json_extract(payload, '$.seconds')) AS avg_s FROM events "
+                "WHERE kind='cycle' AND run_id IS NOT 'restored' AND ts > ?", (since,))[0]
+        scan = q("SELECT COALESCE(SUM(json_extract(payload, '$.mints_seen')), 0) AS seen, "
+                 "AVG(json_extract(payload, '$.in_window')) AS win FROM events WHERE kind='scan' AND ts > ?",
+                 (since,))[0]
+        distinct = lambda sql: q(sql, (since,))[0]["n"]          # noqa: E731
+        return {
+            "rounds": cyc["n"], "avg_round_s": cyc["avg_s"],
+            "coin_checks": scan["seen"], "avg_in_window": scan["win"],
+            "evaluated": distinct("SELECT COUNT(DISTINCT mint) AS n FROM events WHERE kind='candidate' AND ts > ?"),
+            "passed_filter": distinct("SELECT COUNT(DISTINCT mint) AS n FROM events WHERE kind='pass' AND ts > ?"),
+            "scored": distinct("SELECT COUNT(DISTINCT mint) AS n FROM scores WHERE ts > ?"),
+            "bought": distinct("SELECT COUNT(*) AS n FROM positions WHERE opened_ts > ?"),
+        }
+
+    start = (int(now) // 3600 - 23) * 3600
+    hours = {start + i * 3600: {"ts": start + i * 3600, "rounds": 0, "avg_in_window": None, "evaluated": 0}
+             for i in range(24)}
+    for r in q("SELECT CAST(ts / 3600 AS INTEGER) * 3600 AS h, COUNT(*) AS n, "
+               "AVG(json_extract(payload, '$.in_window')) AS win FROM events "
+               "WHERE kind='scan' AND ts >= ? GROUP BY h", (start,)):
+        if r["h"] in hours:
+            hours[r["h"]].update(rounds=r["n"], avg_in_window=r["win"])
+    for r in q("SELECT CAST(ts / 3600 AS INTEGER) * 3600 AS h, COUNT(DISTINCT mint) AS n FROM events "
+               "WHERE kind='candidate' AND ts >= ? GROUP BY h", (start,)):
+        if r["h"] in hours:
+            hours[r["h"]]["evaluated"] = r["n"]
+    return {"hour": span(3600), "day": span(86400), "hours": list(hours.values())}
 
 
 def _runs(q, now: float, keep: int = 40) -> dict:
