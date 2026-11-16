@@ -22,7 +22,7 @@
   --page: #f9f9f7; --surface: #fcfcfb; --raised: #f3f3ef; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
   --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.09); --wash: rgba(11,11,11,0.045);
   --good: #0ca30c; --critical: #d03b3b;
-  --s1: #2a78d6; --s2: #d9730d; --s3: #12927a; --s4: #8a4fd6;
+  --s1: #2a78d6; --s2: #d9730d; --s3: #12927a; --s4: #8a4fd6; --s5: #c2417a;
   --shadow: 0 1px 2px rgba(11,11,11,0.04), 0 12px 32px rgba(11,11,11,0.05);
   --bar-bg: rgba(249,249,247,0.82);
 }
@@ -31,14 +31,14 @@
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --raised: #232322; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.09); --wash: rgba(255,255,255,0.06);
-    --s1: #4f95ea; --s2: #f0953a; --s3: #2bbfa2; --s4: #a77cf0; --shadow: none; --bar-bg: rgba(13,13,13,0.8);
+    --s1: #4f95ea; --s2: #f0953a; --s3: #2bbfa2; --s4: #a77cf0; --s5: #e06a9e; --shadow: none; --bar-bg: rgba(13,13,13,0.8);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19; --raised: #232322; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
   --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.09); --wash: rgba(255,255,255,0.06);
-  --s1: #4f95ea; --s2: #f0953a; --s3: #2bbfa2; --s4: #a77cf0; --shadow: none; --bar-bg: rgba(13,13,13,0.8);
+  --s1: #4f95ea; --s2: #f0953a; --s3: #2bbfa2; --s4: #a77cf0; --s5: #e06a9e; --shadow: none; --bar-bg: rgba(13,13,13,0.8);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -68,7 +68,7 @@ h1 .sub { font-weight: 450; color: var(--muted); }
 .standing .nm span { overflow: hidden; text-overflow: ellipsis; }
 .standing .nm i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
 .standing .ret { font-weight: 700; }
-.speed { display: grid; grid-template-columns: minmax(0, 1fr) repeat(4, auto); font-variant-numeric: tabular-nums; margin-top: 10px; }
+.speed { display: grid; grid-template-columns: minmax(0, 1fr) repeat(5, auto); font-variant-numeric: tabular-nums; margin-top: 10px; }
 .speed > div { padding: 9px 0; border-bottom: 1px solid var(--grid); min-width: 0; }
 .speed .h { color: var(--muted); font-size: 12px; padding-top: 0; }
 .speed .r { text-align: right; padding-left: 14px; white-space: nowrap; }
@@ -82,8 +82,7 @@ h1 .sub { font-weight: 450; color: var(--muted); }
 .card h2 { margin: 0; font-size: 15px; font-weight: 650; }
 .sub { color: var(--ink-2); font-size: 12.5px; margin: 3px 0 0; }
 .note { color: var(--ink-2); font-size: 12.5px; }
-.books { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
-@media (max-width: 1150px) { .books { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.books { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 16px; }
 @media (max-width: 700px) { .books { grid-template-columns: minmax(0, 1fr); } }
 .book { border-top: 4px solid var(--c); }
 .book .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -207,7 +206,7 @@ function chartCard(st) {
   box._draw = draw;
   return h("section", { class: "card", style: "margin-bottom:16px" },
     h("h2", { text: "Afkast over tid" }),
-    h("p", { class: "sub", text: "Startede " + when(st.start_ts) + " med hver sin virtuelle konto (strategi 4 kan være startet senere)." }),
+    h("p", { class: "sub", text: "Alle startede " + when(st.start_ts) + " med hver sin virtuelle konto." }),
     h("div", { class: "legend" }, st.books.map((b, i) => h("span", { style: "--c:" + color(i) }, h("i"), (i + 1) + ". " + b.name))),
     box);
 }
@@ -247,7 +246,7 @@ function speedCard(st) {
       seg),
     h("div", { class: "speed" },
       h("div", { class: "h", text: "" }),
-      st.books.map((b, i) => h("div", { class: "h r hc", style: "--c:" + color(i), text: b.name.replace(" regler", "").replace("Bredt vindue", "Bredt").replace("Længere trailing", "Længere") })),
+      st.books.map((b, i) => h("div", { class: "h r hc", style: "--c:" + color(i), text: b.name.replace(" regler", "").replace("Bredt vindue", "Bredt").replace("Længere trailing", "Længere").replace("Dybe pools", "Dybe") })),
       rows.flatMap(([label, f]) => [h("div", { text: label }), ...st.books.map((b) => h("div", { class: "r", text: f(b) }))])));
 }
 
@@ -282,7 +281,7 @@ function render(state) {
     speedCard(st),
     h("section", { class: "card" },
       h("h2", { text: "Sådan måles det" }),
-      h("p", { class: "sub", text: "Alle fire strategier får de samme coins og måles ens: købet sker til en rigtig Jupiter-quote af strategiens egen ordrestørrelse, stop og trailing følges på hver kurs, og salget er et estimat (kursen minus den prisvirkning, købet betalte). Afkast er i procent af hver strategis startkonto. Under 20–30 lukkede handler pr. strategi er forskellene mest tilfældigheder." }),
+      h("p", { class: "sub", text: "Alle strategier får de samme coins og måles ens: købet sker til en rigtig Jupiter-quote af strategiens egen ordrestørrelse, stop og trailing følges på hver kurs, og salget er et estimat (kursen minus den prisvirkning, købet betalte). Afkast er i procent af hver strategis startkonto. Under 20–30 lukkede handler pr. strategi er forskellene mest tilfældigheder." }),
       st.real_since_pct != null && h("p", { class: "sub", text: "Den rigtige papirkonto (strategi 2's regler med rigtige salgs-quotes) har i samme periode givet " + pct(st.real_since_pct) + "." })));
   document.querySelectorAll(".chart").forEach((el) => el._draw && el._draw());
   $("foot").textContent = "Papirhandel: ingen rigtige penge er i spil. Siden opdaterer sig selv hvert 5. sekund.";

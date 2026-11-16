@@ -6,6 +6,7 @@ virtual account, so they can be compared fairly from the same start.
   3  Gamle regler      the rules from before 15 Nov: score >= 70, 8% per trade, no impact
                        cap, no position cap, LP >= 90%, trailing stop from +12%
   4  Længere trailing  strategy 2, but the trailing stop arms at +15% and trails 10% under the high
+  5  Dybe pools        strategy 2, but only pools with $100k+ liquidity and at most 0.5% price impact
 
 All three are measured the same way: a real Jupiter quote of the book's own order size on
 entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
@@ -46,6 +47,7 @@ class StrategyRules:
     trail_trigger_pct: float
     trail_distance_pct: float
     rules: tuple[tuple[str, tuple[str, ...]], ...] = field(default=())
+    min_liq_usd: float = 40_000.0    # the Filter already requires $40k; a book can ask for more
 
 
 def _rules(r: dict) -> tuple:
@@ -89,6 +91,13 @@ STRATEGIES = (
             "Alt andet": ["Præcis som strategi 2 (vindue, filtre, score 73, 1 %, højst 3 åbne)"],
             "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Giver vinderne mere plads"],
         })),
+    StrategyRules(
+        "s5", "Dybe pools", 30, 72, 300_000, 20_000_000, 95, 73, 1.0, 0.5, 3, 120, 6, 8, 6,
+        _rules({
+            "Alt andet": ["Præcis som strategi 2 (vindue, filtre, score 73, 1 %, højst 3 åbne, trailing +8 %/6 %)"],
+            "Filter": ["Likviditet mindst $100k (i stedet for $40k)"],
+            "Executor": ["Prisvirkning højst 0,5 % (i stedet for 1,0 %)", "Billigere handler, færre coins"],
+        }), min_liq_usd=100_000),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 
@@ -178,8 +187,12 @@ class StrategyBook:
                                 (self.r.key, c.mint))[0]["t"]
         return not (last and now - last < self.r.cooldown_minutes * 60)
 
+    def qualifies(self, c: Candidate, score: float, lp_pct: float | None) -> bool:
+        return (score >= self.r.min_score and (lp_pct is None or lp_pct >= self.r.min_lp_pct)
+                and c.liquidity_usd >= self.r.min_liq_usd)
+
     def consider(self, c: Candidate, score: float, lp_pct: float | None, decimals: int | None) -> BookPosition | None:
-        if score < self.r.min_score or (lp_pct is not None and lp_pct < self.r.min_lp_pct) or decimals is None:
+        if not self.qualifies(c, score, lp_pct) or decimals is None:
             return None
         if not self.wants(c):
             return None
@@ -296,7 +309,7 @@ class StrategyLab:
                 continue
             r = rnd[b.r.key]
             r["scored"].append(c.mint)
-            if score >= b.r.min_score and (lp is None or lp >= b.r.min_lp_pct):
+            if b.qualifies(c, score, lp):
                 r["qualified"].append(c.mint)
             r["bought"] += b.r.key in bought
 

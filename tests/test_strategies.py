@@ -99,7 +99,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -188,3 +188,21 @@ class ResetTests(unittest.TestCase):
             self.assertEqual(len(fresh.store.query("SELECT * FROM shadow_positions")), shadows)
             fresh.log.close()
             fresh.store.close()
+
+
+class Strategy5Tests(unittest.TestCase):
+    def test_deep_pools_only_and_a_tighter_impact_cap(self):
+        thin = pair(mint="THIN", symbol="THIN", liq=60_000, mcap=600_000)   # passes the $40k filter, not $100k
+        with tempfile.TemporaryDirectory() as d:
+            desk = Desk(DeskConfig(data_dir=d, smart_wallet_seed_file="/nonexistent"), "t", echo=False,
+                        sources=market([thin]))
+            desk.scan_cycle()
+            held = {b.r.key: {p.mint for p in b.open.values()} for b in desk.lab.books}
+            self.assertEqual(held["s5"], {"GOOD"})
+            self.assertEqual(held["s2"], {"GOOD", "THIN"})
+            # an order whose impact is above 0.5% is shrunk until it fits (or skipped)
+            s5 = next(b for b in desk.lab.books if b.r.key == "s5")
+            p = next(iter(s5.open.values()))
+            self.assertLessEqual(p.entry_impact_pct, 0.5)
+            desk.log.close()
+            desk.store.close()

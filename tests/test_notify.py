@@ -131,7 +131,7 @@ class StrategyNotificationTests(unittest.TestCase):
             src.jup.price["GOOD"] = 0.0005
             desk.shadow_tick()
             sells = [m for m in rec.msgs if " salg: GOOD " in m[0]]
-            self.assertEqual(sorted(m[0][:2] for m in sells), ["S1", "S2", "S3", "S4"])
+            self.assertEqual(sorted(m[0][:2] for m in sells), ["S1", "S2", "S3", "S4", "S5"])
             self.assertTrue(all("Stop loss" in m[1] and "kontoen står på −" in m[1] for m in sells))
             self.assertNotIn("$", " ".join(t + m for t, m, _ in rec.msgs))
             desk.log.close()
