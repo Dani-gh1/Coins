@@ -30,7 +30,7 @@ from .dashboard import equity_points
 from .messages import Deferral, ExitSignal, Kill, ScoreCard
 from .shadow import ShadowBook, shadow_line, shadow_payload
 from .smart_wallets import SmartWalletBook
-from .net import RISK_RPM, SHADOW_RPM, Http
+from .net import JUPITER_API_KEY, RISK_RPM, SHADOW_RPM, Http, jupiter_key_rejected
 from .notify import REASONS, Notifier, pct
 from .sources import Sources
 from .store import Store
@@ -62,6 +62,9 @@ class Desk:
         self.shadow = ShadowBook(cfg.shadow, cfg.risk, self.store, self.executor,
                                  cfg.executor.reentry_cooldown_minutes, cfg.executor.tx_cost_usd)
         self.notify = notifier or Notifier.from_env()
+        self.notify.on_error = lambda err: self.log.event(
+            "notify", "error", {"error": err}, line=f"notification failed: {err}")
+        self._jup_key_reported = False
         self.stop_event = threading.Event()
         now = time.time()
         self.recheck_at: dict[str, float] = {
@@ -177,6 +180,12 @@ class Desk:
         for c in pumped:
             self._shadow(c, "pumped", None, None)
         self._learn()
+        if jupiter_key_rejected() and not self._jup_key_reported:
+            self._jup_key_reported = True
+            self.log.event("desk", "error", {"error": "Jupiter rejected JUPITER_API_KEY (401)"},
+                           line="JUPITER KEY REJECTED (401): using the free keyless API instead - fix the key")
+            self.notify.send("Jupiter-nøglen virker ikke", "Jupiter afviste nøglen (fejl 401). Desken bruger den gratis "
+                             "adgang uden nøgle i stedet og handler videre. Ret nøglen.", tags=("warning",), priority=4)
         self.save_state()
         stats.update(cycle=self.cycle, seconds=round(time.time() - t0, 1),
                      equity=round(self.executor.equity(), 2), cash=round(self.executor.cash, 2),
@@ -383,6 +392,8 @@ class Desk:
                                          "open_positions": len(self.executor.positions),
                                          "smart_wallets": self.book.size()},
                        line=f"run {self.run_id} starting (paper) equity ${self.executor.equity():,.2f}")
+        self.log.say("desk", "notifications: " + ("on (ntfy)" if self.notify.enabled else "off (NTFY_TOPIC not set)")
+                     + " | Jupiter: " + ("API key" if JUPITER_API_KEY else "keyless"))
         if prev_clean:
             self.notify.send("Desken er startet", f"Kontoen står på {pct(self._return_pct(), 2)} · "
                              f"{len(self.executor.positions)} åbne positioner", tags=("arrow_forward",), priority=2)

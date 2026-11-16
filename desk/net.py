@@ -43,6 +43,17 @@ RISK_RPM = {
 JUPITER_API_KEY = os.environ.get("JUPITER_API_KEY", "").strip()
 JUPITER_HOST = "api.jup.ag" if JUPITER_API_KEY else "lite-api.jup.ag"
 HOST_HEADERS = {"api.jup.ag": {"x-api-key": JUPITER_API_KEY}} if JUPITER_API_KEY else {}
+# If Jupiter rejects the key (401), every client falls back to the keyless host for the rest of
+# the run, so a wrong key can never stop the desk from trading. The desk reports it loudly.
+_JUPITER_STATE = {"key_rejected": False}
+
+
+def jupiter_key_rejected() -> bool:
+    return _JUPITER_STATE["key_rejected"]
+
+
+def _keyless(url: str) -> str:
+    return url.replace("https://api.jup.ag/", "https://lite-api.jup.ag/", 1)
 DEFAULT_RPM = 60
 MAX_RETRY_AFTER_S = 30.0
 
@@ -114,6 +125,8 @@ class Http:
         return self._request(url, json.dumps(body).encode())
 
     def _request(self, url: str, data: bytes | None):
+        if _JUPITER_STATE["key_rejected"] and url.startswith("https://api.jup.ag/"):
+            url = _keyless(url)
         host = urllib.parse.urlsplit(url).hostname or ""
         limiter = self._limiter(host)
         last_err: Exception | None = None
@@ -135,6 +148,12 @@ class Http:
             except urllib.error.HTTPError as e:
                 self.stats[f"{host}:{e.code}"] += 1
                 last_err = HttpError(url, e.code, e.reason)
+                if e.code == 401 and host == "api.jup.ag":
+                    _JUPITER_STATE["key_rejected"] = True
+                    url = _keyless(url)
+                    host = "lite-api.jup.ag"
+                    limiter = self._limiter(host)
+                    continue
                 if e.code == 429 or e.code >= 500:
                     backoff = (2 ** attempt) * 2 + random.random()
                     retry_after = _retry_after(e.headers)

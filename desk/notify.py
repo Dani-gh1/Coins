@@ -19,6 +19,19 @@ import urllib.request
 REASONS = {"stop_loss": "Stop loss", "trailing_stop": "Trailing stop", "stale_price": "Ingen kurs i 5 min."}
 
 
+def _describe(e: Exception) -> str:
+    """The error without the topic name (which works like a password)."""
+    code = getattr(e, "code", None)
+    if code:
+        body = ""
+        try:
+            body = e.read().decode(errors="replace")[:200]      # ntfy explains 4xx errors in the body
+        except Exception:   # noqa: BLE001
+            pass
+        return f"HTTP {code} {body}".strip()
+    return type(e).__name__ + ": " + str(getattr(e, "reason", e))[:200]
+
+
 def pct(x: float, digits: int = 1) -> str:
     """+1,5 % / −0,8 % (Danish decimal comma, real minus sign)."""
     s = f"{abs(x):.{digits}f}".replace(".", ",")
@@ -32,6 +45,8 @@ class Notifier:
         self.timeout = timeout
         self.sent = 0
         self.failed = 0
+        self.last_error: str | None = None
+        self.on_error = None              # callback(str), set by the desk so failures reach the log
         self._q: queue.Queue = queue.Queue(maxsize=200)
         self._thread: threading.Thread | None = None
 
@@ -77,10 +92,16 @@ class Notifier:
                     self._post(msg)
                     self.sent += 1
                     break
-                except Exception:   # noqa: BLE001 - a notification must never take the desk down
+                except Exception as e:   # noqa: BLE001 - a notification must never take the desk down
+                    self.last_error = _describe(e)
                     continue
             else:
                 self.failed += 1
+                if self.on_error:
+                    try:
+                        self.on_error(self.last_error or "unknown error")
+                    except Exception:   # noqa: BLE001
+                        pass
 
     def _post(self, msg: dict) -> None:
         req = urllib.request.Request(self.server + "/", data=json.dumps(msg).encode(),

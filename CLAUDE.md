@@ -26,7 +26,7 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
 - `python3 -m desk run --dashboard 8787` (brug `python3`, ikke `python`, på brugerens Mac).
 - Dashboardet ligger på `http://127.0.0.1:8787` (dansk UI, 4 faner).
 - Papirbogen gemmes portabelt i `runs/state.json` og gendannes, når databasen er tom.
-- Testene køres med `python3 -m unittest discover -s tests` (70 tests).
+- Testene køres med `python3 -m unittest discover -s tests` (72 tests).
 - **Desken kører 24/7 på brugerens Oracle Cloud-server** (Ubuntu 24.04, offentlig IP 89.168.96.169,
   bruger `ubuntu`, mappe `~/Coins`) som systemd-servicen `desk` (`Restart=always`). Brugeren logger
   ind fra Macen med `ssh -i ~/.ssh/oracle ubuntu@89.168.96.169`. Opdatering på serveren:

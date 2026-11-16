@@ -164,3 +164,40 @@ class SlowFeedTests(unittest.TestCase):
         scout._slow_at -= 121
         scout.scan()
         self.assertEqual(calls, {"jup": 2, "gecko": 2})
+
+
+class JupiterKeyFallbackTests(unittest.TestCase):
+    def test_a_rejected_key_falls_back_to_the_keyless_api(self):
+        import io
+        import urllib.error
+        from desk import net
+        seen = []
+
+        def fake_urlopen(req, timeout=None):
+            seen.append(req.full_url)
+            if req.full_url.startswith("https://api.jup.ag/"):
+                raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, io.BytesIO(b""))
+            return io.BytesIO(b'{"ok": 1}')
+
+        old = dict(net._JUPITER_STATE)
+        try:
+            with mock.patch.object(net.urllib.request, "urlopen", fake_urlopen):
+                http = net.Http(retries=1, rpm={"api.jup.ag": 6000, "lite-api.jup.ag": 6000})
+                self.assertEqual(http.get("https://api.jup.ag/price/v3", {"ids": "X"}), {"ok": 1})
+                self.assertTrue(net.jupiter_key_rejected())
+                http.get("https://api.jup.ag/price/v3", {"ids": "Y"})       # straight to keyless now
+            self.assertEqual([u.split("/")[2] for u in seen], ["api.jup.ag", "lite-api.jup.ag", "lite-api.jup.ag"])
+        finally:
+            net._JUPITER_STATE.update(old)
+
+
+class NotifyErrorTests(unittest.TestCase):
+    def test_a_failed_notification_reaches_the_log(self):
+        from desk.notify import Notifier
+        errors = []
+        n = Notifier("t", "http://127.0.0.1:9", timeout=0.5)
+        n.on_error = errors.append
+        n.send("x", "y")
+        n.flush(5)
+        self.assertEqual(len(errors), 1)
+        self.assertNotIn("t/", errors[0])
