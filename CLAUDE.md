@@ -40,7 +40,7 @@ Det er ren Python-stdlib (3.11+), uden afhængigheder. Se `README.md` for komman
 - **Start ikke desken i cloud-sessioner eller på Macen.** Brugeren vil kun have én papirkonto, og
   den ligger på serveren. Serverens nye handler ligger i dens database, ikke på GitHub.
 - Notifikationer til telefonen via ntfy-appen (`desk/notify.py`): miljøvariablen `NTFY_TOPIC` sættes
-  med `sudo systemctl edit desk` ligesom `JUPITER_API_KEY`. Sendes ved køb, salg, start, stop og nedbrud,
+  med `sudo systemctl edit desk` ligesom `JUPITER_API_KEY`. Sendes kun ved køb, salg, stop og nedbrud (brugerens ønske),
   og ved køb og salg i hver af de tre strategier (S1–S3).
 - **Strategitest (midlertidig, fra 2026-11-16):** `desk/strategies.py` kører tre regelsæt på virtuelle
   konti side om side (1 bredt vindue, 2 nuværende regler, 3 gamle regler: score ≥ 70, 8 %, LP 90 %,

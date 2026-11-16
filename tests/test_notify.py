@@ -34,7 +34,7 @@ class DeskNotificationTests(unittest.TestCase):
                         "t", echo=False, sources=src, notifier=rec)
             desk.run(hours=1e-7)                       # start, one scan (buys GOOD), stop
             titles = [m[0] for m in rec.msgs]
-            self.assertEqual(titles[0], "Desken er startet")
+            self.assertNotIn("Desken er startet", titles)            # only trades and stops are sent
             self.assertIn("Køb: GOOD", titles)
             self.assertEqual(titles[-1], "Desken er stoppet")
             buy = next(m for m in rec.msgs if m[0] == "Køb: GOOD")
@@ -68,7 +68,7 @@ class DeskNotificationTests(unittest.TestCase):
             rec = Recorder()
             second = Desk(cfg, "b", echo=False, sources=sources(), notifier=rec)
             second.run(hours=1e-7)
-            self.assertEqual(rec.msgs[0][0], "Desken genstartede efter et nedbrud")
+            self.assertEqual(rec.msgs[0][0], "Desken stoppede uventet")
             self.assertEqual(rec.msgs[0][2], 4)
             second.store.close()
 

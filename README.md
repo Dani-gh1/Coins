@@ -87,7 +87,7 @@ than 72 h) so we can see whether widening the real window would pay.
 
 Set `NTFY_TOPIC` (a long, hard-to-guess name) and subscribe to the same topic in the free
 [ntfy](https://ntfy.sh) app. The desk then sends a message on every real buy and sale, when it
-starts, when it stops, and when it comes back after a crash. Results are in percent. Messages
+stops, and (on the next start) when it stopped unexpectedly. Results are in percent. Messages
 go out from a background thread and never delay a trade. Shadow trades send nothing.
 
 ## Run it

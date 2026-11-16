@@ -205,8 +205,6 @@ class Desk:
             self._jup_key_reported = True
             self.log.event("desk", "error", {"error": "Jupiter rejected JUPITER_API_KEY (401)"},
                            line="JUPITER KEY REJECTED (401): using the free keyless API instead - fix the key")
-            self.notify.send("Jupiter-nøglen virker ikke", "Jupiter afviste nøglen (fejl 401). Desken bruger den gratis "
-                             "adgang uden nøgle i stedet og handler videre. Ret nøglen.", tags=("warning",), priority=4)
         self.save_state()
         stats.update(cycle=self.cycle, seconds=round(time.time() - t0, 1),
                      equity=round(self.executor.equity(), 2), cash=round(self.executor.cash, 2),
@@ -511,12 +509,10 @@ class Desk:
                        line=f"run {self.run_id} starting (paper) equity ${self.executor.equity():,.2f}")
         self.log.say("desk", "notifications: " + ("on (ntfy)" if self.notify.enabled else "off (NTFY_TOPIC not set)")
                      + " | Jupiter: " + ("API key" if JUPITER_API_KEY else "keyless"))
-        if prev_clean:
-            self.notify.send("Desken er startet", f"Kontoen står på {pct(self._return_pct(), 2)} · "
-                             f"{len(self.executor.positions)} åbne positioner", tags=("arrow_forward",), priority=3)
-        else:
-            self.notify.send("Desken genstartede efter et nedbrud",
-                             f"Den stoppede uden at lukke pænt ned og kører nu igen · kontoen står på {pct(self._return_pct(), 2)}",
+        if not prev_clean:
+            # A crash cannot send its own message, so the next start reports that it stopped.
+            self.notify.send("Desken stoppede uventet",
+                             f"Den gik ned uden at lukke pænt og kører nu igen · kontoen står på {pct(self._return_pct(), 2)}",
                              tags=("warning",), priority=4)
         risk_thread = threading.Thread(target=self._risk_loop, name="risk", daemon=True)
         risk_thread.start()
