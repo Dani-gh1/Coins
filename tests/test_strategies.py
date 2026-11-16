@@ -100,7 +100,7 @@ class LabTests(unittest.TestCase):
         desk.src.jup.price["GOOD"] = 0.0009
         desk.shadow_tick()
         st = snapshot(desk.store.path)["strategies"]
-        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13", "s14"])
+        self.assertEqual([b["key"] for b in st["books"]], ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15"])
         s3 = st["books"][2]
         self.assertEqual(s3["closed"], 1)
         self.assertLess(s3["return_pct"], -0.4)                 # an 8% stake stopped out costs the account ~0.5-0.9%
@@ -369,3 +369,15 @@ class Strategy14Tests(unittest.TestCase):
             self.assertLessEqual(s14.impact_cap_pct, o.impact_cap_pct)
             self.assertGreaterEqual(s14.min_lp_pct, o.min_lp_pct)
         self.assertEqual((s14.min_score, s14.stake_pct, s14.max_bundle_pct), (82, 15.0, 3))
+
+
+class Strategy15Tests(unittest.TestCase):
+    def test_strategy_14_rules_in_strategy_1_window(self):
+        from dataclasses import asdict
+        from desk.strategies import STRATEGIES
+        by = {s.key: asdict(s) for s in STRATEGIES}
+        window = ("min_age_minutes", "max_age_hours", "min_mcap", "max_mcap")
+        for k, v in by["s15"].items():
+            if k in ("key", "name", "rules"):
+                continue
+            self.assertEqual(v, by["s1" if k in window else "s14"][k], k)
