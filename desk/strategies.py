@@ -1,38 +1,38 @@
-"""Strategy test: three rule sets run side by side on the same coins, each on its own
-virtual account, so they can be compared fairly from the same start.
+"""Strategy test: twenty rule sets run side by side on the same coins, each on its own
+virtual account, so they can be compared fairly from the same start. They cover the most
+widely used memecoin approaches, one idea each (rewritten 2026-11-19; the earlier 17 were
+mostly variations of one "picky" idea).
 
-  1  Bredt vindue      the current rules, but a wider window: $100k-$20M, 10 min-7 days
-  2  Nuværende regler  the rules the real paper desk runs with
-  3  Gamle regler      the rules from before 15 Nov: score >= 70, 8% per trade, no impact
-                       cap, no position cap, LP >= 90%, trailing stop from +12%
-  4  Længere trailing  strategy 2, but the trailing stop arms at +15% and trails 10% under the high
-  5  Dybe pools        strategy 2, but only pools with $100k+ liquidity and at most 0.5% price impact
-  6  Kræsen            score >= 76, $100k+ liquidity, at most 0.5% impact, trailing from +15% / 10%
-  7  Profil B          the user's own profile: 1-24 h, $300k-$10M, stricter filters, score >= 78,
-                       6 h cooldown, 2% entry drift cap, >= 1.25% cost per side, 12 h pause after 3 losses
-  8  Aggressiv         aims at 1% a day: wide window, score >= 65, 10% stake, 6 open, 30 min cooldown,
-                       stop -8%, trailing from +20% / 12%
-  9  Hurtig gevinst    strategy 2 plus a +12% take-profit and a 2-hour time stop
-  10 Kræsen+           strategy 6 sharpened: $150k+ liquidity, 0.3% impact, at most +40% in 1h,
-                       top 10 <= 20%, bundles <= 5%, 3% stake
-  11 Kræsen+ stor      strategy 10 with a 6% stake and a 24 h pause after 2 losses in a row
-  12 Kræsen+ max       strategy 10 with an 8% stake (the desk's hard maximum) and a 48 h pause after 2 losses
-  13 Kræsen+ 15 %      strategy 12 with a 15% stake: virtual only (the paper account's cap stays 8%)
-  14 Max kræsen        every picky setting at its tightest realistic value (score >= 82, $250k liquidity,
-                       0.2% impact, LP 100%, top 10 <= 15%, dev <= 1%, bundles <= 3%) and a 15% stake
-  15 Bred max kræsen   strategy 14's rules in strategy 1's wide window ($100k-$20M, 10 min-7 days)
-  16 Bred Kræsen+ 15 % strategy 13's rules in strategy 1's wide window
-  17 Mange små         many small trades: wide window, score >= 55, 0.5% stake, 10 open, 15 min cooldown,
-                       stop -4%, take-profit +5%, trailing +3%/2%, 30 min time stop
+  1  Momentum              buy strength: score >= 75 and $150k+ 1h volume
+  2  Scalper               quick small wins: +6% target, -3% stop, out within 20 minutes
+  3  Swing 24 t            give it up to a day: wide stop, wide trailing
+  4  Månestråle            lottery: many tiny stakes, wide stop, one big winner pays for all
+  5  Nylancering           launch sniper: only the first 60 minutes, +30% target
+  6  Tidlig bølge          young and small: first 6 hours, $100k-$3M
+  7  Etableret             old and big: $5-$20M, $500k+ liquidity, small steady moves
+  8  Dybe pools            only pools with $300k+ liquidity and at most 0.3% impact
+  9  Volumeneksplosion     $500k+ 1h volume, but not already +60%
+  10 Smart money           score >= 80 only: buyers, holders and smart wallets all agree
+  11 Rolig akkumulering    buy before it is obvious: at most +8% in the last hour
+  12 Ikke FOMO             never buy the top: at most +30% in 1h, entry drift <= 1.5%
+  13 Risiko 1:2            fixed risk/reward: -5% stop, +10% target, no trailing
+  14 Risiko 1:3            -4% stop, +12% target, no trailing
+  15 Sikker først          strictest anti-rug filters (LP 100%, top 10 <= 15%, dev <= 1%)
+  16 Mange små             spread wide: 0.5% stakes, 10 open, quick exits
+  17 Høj overbevisning     8% stakes, score >= 78, only 2 open, 24 h pause after 2 losses
+  18 Kontrol               no score threshold: does the score help at all?
+  19 Diamanthænder         -35% stop, no trailing, 24 h hold
+  20 Tæt trailing          lock gains early: trailing from +4%, 3% under the high
 
-All three are measured the same way: a real Jupiter quote of the book's own order size on
-entry (so an 8% order pays its real price impact), the real stop and trailing rules on every
-mark, and an estimated sale (the mark minus the price impact the buy paid, minus fees). The
-real paper account (strategy 2's rules with real sell quotes) keeps running untouched.
+All are measured the same way: a real Jupiter quote of the book's own order size on entry
+(so a big order pays its real price impact), the real stop and trailing rules on every mark,
+and an estimated sale (the mark minus the price impact the buy paid, minus fees). The real
+paper account keeps running untouched.
 
 The books get their coins from the desk's normal pipeline: every scorecard the Analyst makes
-for the real window, and every scorecard from the shadow's wide window. Filter rules shared by
-all three are applied once; the one difference (LP 90% for strategy 3) is checked per book.
+for the real window, and every scorecard from the shadow's wide window ($100k-$20M, 10 min-7
+days). Filter rules shared by all books are applied once; each book's own extra limits are
+checked per book.
 """
 from __future__ import annotations
 
@@ -86,180 +86,210 @@ def _rules(r: dict) -> tuple:
 
 STRATEGIES = (
     StrategyRules(
-        "s1", "Bredt vindue", 10, 168, 100_000, 20_000_000, 95, 73, 1.0, 1.0, 3, 120, 6, 8, 6,
+        "s1", "Momentum", 30, 72, 300_000, 20_000_000, 95, 75, 1.5, 1.0, 4, 60, 7, 10, 8,
         _rules({
-            "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio."],
-            "Filter": ["Som strategi 2 (LP mindst 95 %)"],
-            "Analyst": ["Køber ved score 73 eller mere"],
-            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Stop −6 %", "Trailing fra +8 %, 6 % under toppen"],
+            "Idé": ["Køb styrke: høj score og kraftig 1-times volumen. Den mest udbredte memecoin-strategi"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["1-times volumen mindst $150k", "Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Køber ved score 75 eller mere"],
+            "Executor": ["1,5 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 4 åbne", "Karantæne 1 t."],
+            "Risk": ["Stop −7 %", "Trailing fra +10 %, 8 % under toppen"],
+        }), min_vol_1h_usd=150_000),
+    StrategyRules(
+        "s2", "Scalper", 10, 72, 100_000, 20_000_000, 95, 68, 2.0, 0.5, 5, 10, 3, 3, 2,
+        _rules({
+            "Idé": ["Mange hurtige gevinster: små mål, stramt stop, ude igen på minutter"],
+            "Scout": ["Alder 10 min.–72 t.", "Markedsværdi $100k–$20 mio. (bredt vindue)"],
+            "Filter": ["Likviditet mindst $100k, 1-times volumen mindst $200k"],
+            "Analyst": ["Køber ved score 68 eller mere"],
+            "Executor": ["2 % af kontoen pr. handel", "Prisvirkning højst 0,5 %", "Højst 5 åbne", "Karantæne 10 min."],
+            "Risk": ["Stop −3 %", "Sælger ved +6 % (gevinstmål)", "Trailing fra +3 %, 2 % under toppen",
+                     "Sælger efter 20 min., hvis intet andet er sket"],
+        }), min_liq_usd=100_000, min_vol_1h_usd=200_000, take_profit_pct=6.0, max_hold_minutes=20),
+    StrategyRules(
+        "s3", "Swing 24 t", 120, 72, 300_000, 20_000_000, 95, 72, 2.0, 1.0, 4, 180, 10, 20, 12,
+        _rules({
+            "Idé": ["Giv handlen op til et døgn: bredt stop og trailing, der lader vinderne løbe"],
+            "Scout": ["Alder 2–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Køber ved score 72 eller mere"],
+            "Executor": ["2 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 4 åbne", "Karantæne 3 t."],
+            "Risk": ["Stop −10 %", "Trailing fra +20 %, 12 % under toppen", "Sælger efter 24 t., hvis intet andet er sket"],
+        }), max_hold_minutes=1440),
+    StrategyRules(
+        "s4", "Månestråle", 10, 168, 100_000, 20_000_000, 90, 60, 0.5, 1.0, 10, 30, 20, 50, 25,
+        _rules({
+            "Idé": ["Lotteri-strategien: mange små indsatser, bredt stop, og en enkelt kæmpevinder betaler for alle tab"],
+            "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio. (bredt vindue)"],
+            "Filter": ["LP mindst 90 %"],
+            "Analyst": ["Køber ved score 60 eller mere"],
+            "Executor": ["0,5 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 10 åbne", "Karantæne 30 min."],
+            "Risk": ["Stop −20 %", "Trailing fra +50 %, 25 % under toppen"],
         })),
     StrategyRules(
-        "s2", "Nuværende regler", 30, 72, 300_000, 20_000_000, 95, 73, 1.0, 1.0, 3, 120, 6, 8, 6,
+        "s5", "Nylancering", 10, 1, 100_000, 2_000_000, 90, 60, 0.5, 2.0, 8, 15, 10, 25, 15,
         _rules({
-            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
-            "Filter": ["Likviditet ≥ $40k, 1-times volumen ≥ $50k, ikke +80 % på 1 t.",
-                       "Mint/freeze tilbagekaldt, LP mindst 95 % brændt/låst",
-                       "Top 10 ≤ 25 %, udvikler ≤ 3 %, bundtede ≤ 10 %"],
-            "Analyst": ["Køber ved score 73 eller mere"],
-            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Stop −6 %", "Trailing fra +8 %, 6 % under toppen"],
-        })),
+            "Idé": ["Skyd tidligt: kun de første 60 minutter efter lanceringen, små indsatser, hurtigt gevinstmål"],
+            "Scout": ["Alder 10–60 min.", "Markedsværdi $100k–$2 mio."],
+            "Filter": ["LP mindst 90 %"],
+            "Analyst": ["Køber ved score 60 eller mere"],
+            "Executor": ["0,5 % af kontoen pr. handel", "Prisvirkning højst 2,0 %", "Højst 8 åbne", "Karantæne 15 min."],
+            "Risk": ["Stop −10 %", "Sælger ved +30 % (gevinstmål)", "Trailing fra +25 %, 15 % under toppen",
+                     "Sælger efter 45 min., hvis intet andet er sket"],
+        }), take_profit_pct=30.0, max_hold_minutes=45),
     StrategyRules(
-        "s3", "Gamle regler", 30, 72, 300_000, 20_000_000, 90, 70, 8.0, 0.0, 0, 120, 6, 12, 6,
+        "s6", "Tidlig bølge", 30, 6, 100_000, 3_000_000, 95, 70, 1.0, 1.0, 4, 60, 8, 15, 10,
         _rules({
-            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
-            "Filter": ["Som strategi 2, men LP mindst 90 % brændt/låst"],
+            "Idé": ["Kom ind, mens coinen stadig er ung og lille: de første 6 timer, før de store kommer ind"],
+            "Scout": ["Alder 30 min.–6 t.", "Markedsværdi $100k–$3 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
             "Analyst": ["Køber ved score 70 eller mere"],
-            "Executor": ["8 % af kontoen pr. handel", "Intet loft på prisvirkning", "Intet loft på antal åbne",
-                         "Karantæne 2 t."],
-            "Risk": ["Stop −6 %", "Trailing fra +12 %, 6 % under toppen"],
+            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 4 åbne", "Karantæne 1 t."],
+            "Risk": ["Stop −8 %", "Trailing fra +15 %, 10 % under toppen"],
         })),
     StrategyRules(
-        "s4", "Længere trailing", 30, 72, 300_000, 20_000_000, 95, 73, 1.0, 1.0, 3, 120, 6, 15, 10,
+        "s7", "Etableret", 1440, 168, 5_000_000, 20_000_000, 95, 70, 3.0, 0.5, 3, 120, 5, 8, 5,
         _rules({
-            "Alt andet": ["Præcis som strategi 2 (vindue, filtre, score 73, 1 %, højst 3 åbne)"],
-            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Giver vinderne mere plads"],
-        })),
+            "Idé": ["De store og gamle: høj markedsværdi, dyb likviditet og færre rug-pulls. Små, men stabile bevægelser"],
+            "Scout": ["Alder 1–7 dage", "Markedsværdi $5–$20 mio."],
+            "Filter": ["Likviditet mindst $500k", "Top 10 ≤ 20 %"],
+            "Analyst": ["Køber ved score 70 eller mere"],
+            "Executor": ["3 % af kontoen pr. handel", "Prisvirkning højst 0,5 %", "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Stop −5 %", "Trailing fra +8 %, 5 % under toppen"],
+        }), min_liq_usd=500_000, max_top10_pct=20),
     StrategyRules(
-        "s5", "Dybe pools", 30, 72, 300_000, 20_000_000, 95, 73, 1.0, 0.5, 3, 120, 6, 8, 6,
+        "s8", "Dybe pools", 30, 72, 300_000, 20_000_000, 95, 70, 3.0, 0.3, 3, 120, 6, 10, 7,
         _rules({
-            "Alt andet": ["Præcis som strategi 2 (vindue, filtre, score 73, 1 %, højst 3 åbne, trailing +8 %/6 %)"],
-            "Filter": ["Likviditet mindst $100k (i stedet for $40k)"],
-            "Executor": ["Prisvirkning højst 0,5 % (i stedet for 1,0 %)", "Billigere handler, færre coins"],
-        }), min_liq_usd=100_000),
-    StrategyRules(
-        "s6", "Kræsen", 30, 72, 300_000, 20_000_000, 95, 76, 1.0, 0.5, 3, 120, 6, 15, 10,
-        _rules({
-            "Idé": ["Kun de stærkeste coins, billigt købt, og vinderne får plads"],
+            "Idé": ["Kun coins, der kan handles næsten uden prisvirkning. Billige handler, så mere af gevinsten bliver tilbage"],
             "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
-            "Filter": ["Som strategi 2, men likviditet mindst $100k"],
-            "Analyst": ["Køber ved score 76 eller mere"],
-            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 0,5 %", "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen"],
-        }), min_liq_usd=100_000),
-    StrategyRules(
-        "s7", "Profil B", 60, 24, 300_000, 10_000_000, 100, 78, 1.0, 1.0, 3, 360, 6, 8, 6,
-        _rules({
-            "Scout": ["Alder 1–24 t.", "Markedsværdi $300k–$10 mio."],
-            "Filter": ["Likviditet ≥ $60k, 1-times volumen ≥ $100k, højst +50 % på 1 t.",
-                       "Mint/freeze tilbagekaldt, LP 100 % brændt/låst",
-                       "Top 10 ≤ 20 %, udvikler ≤ 2 %, bundtede ≤ 5 %"],
-            "Analyst": ["Køber ved score 78 eller mere", "Samme vægte som de andre"],
-            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 3 åbne",
-                         "Karantæne 6 t.", "Køber ikke, hvis kursen har flyttet sig over 2 % siden scanningen",
-                         "Regner med mindst 1,25 % i omkostning pr. side"],
-            "Risk": ["Stop −6 %", "Trailing fra +8 %, 6 % under toppen", "Pause i 12 t. efter 3 tab i træk"],
-        }), min_liq_usd=60_000, min_vol_1h_usd=100_000, max_change_1h_pct=50, max_top10_pct=20,
-        max_dev_pct=2, max_bundle_pct=5, max_entry_drift_pct=2.0, min_cost_per_side_pct=1.25,
-        pause_after_losses=3, pause_hours=12),
-    StrategyRules(
-        "s8", "Aggressiv", 10, 168, 100_000, 20_000_000, 90, 65, 10.0, 2.0, 6, 30, 8, 20, 12,
-        _rules({
-            "Mål": ["1 % afkast om dagen: mange handler, stor indsats, vinderne løber langt"],
-            "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio. (bredt vindue)"],
-            "Filter": ["Som strategi 2, men LP mindst 90 %"],
-            "Analyst": ["Køber ved score 65 eller mere"],
-            "Executor": ["10 % af kontoen pr. handel", "Prisvirkning højst 2,0 %", "Højst 6 åbne", "Karantæne 30 min."],
-            "Risk": ["Stop −8 %", "Trailing fra +20 %, 12 % under toppen"],
-        })),
-    StrategyRules(
-        "s9", "Hurtig gevinst", 30, 72, 300_000, 20_000_000, 95, 73, 1.0, 1.0, 3, 120, 6, 8, 6,
-        _rules({
-            "Alt andet": ["Præcis som strategi 2 (vindue, filtre, score 73, 1 %, højst 3 åbne)"],
-            "Risk": ["Stop −6 %, trailing fra +8 %, 6 % under toppen",
-                     "Sælger ved +12 % (gevinstmål)", "Sælger efter 2 timer, hvis intet andet er sket"],
-        }), take_profit_pct=12.0, max_hold_minutes=120),
-    StrategyRules(
-        "s10", "Kræsen+", 30, 72, 300_000, 20_000_000, 95, 76, 3.0, 0.3, 3, 120, 6, 15, 10,
-        _rules({
-            "Idé": ["Strategi 6 skærpet: endnu billigere handler, ikke for sent ind, og 3 % indsats"],
-            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
-            "Filter": ["Likviditet mindst $150k", "Højst +40 % på 1 time (ikke for sent ind)",
-                       "Top 10 ≤ 20 %, bundtede ≤ 5 %"],
-            "Analyst": ["Køber ved score 76 eller mere"],
+            "Filter": ["Likviditet mindst $300k"],
+            "Analyst": ["Køber ved score 70 eller mere"],
             "Executor": ["3 % af kontoen pr. handel", "Prisvirkning højst 0,3 %", "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen"],
-        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5),
+            "Risk": ["Stop −6 %", "Trailing fra +10 %, 7 % under toppen"],
+        }), min_liq_usd=300_000),
     StrategyRules(
-        "s11", "Kræsen+ stor", 30, 72, 300_000, 20_000_000, 95, 76, 6.0, 0.3, 3, 120, 6, 15, 10,
+        "s9", "Volumeneksplosion", 30, 72, 300_000, 20_000_000, 95, 65, 1.5, 1.5, 4, 60, 8, 12, 8,
         _rules({
-            "Idé": ["Strategi 10 med dobbelt indsats, og en pause når det går dårligt"],
-            "Alt andet": ["Som strategi 10: likviditet ≥ $150k, prisvirkning ≤ 0,3 %, højst +40 % på 1 t.,",
-                          "top 10 ≤ 20 %, bundtede ≤ 5 %, score ≥ 76, trailing +15 %/10 %, stop −6 %"],
-            "Executor": ["6 % af kontoen pr. handel", "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Pause i 24 t. efter 2 tab i træk"],
-        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
-        pause_after_losses=2, pause_hours=24),
+            "Idé": ["Følg pengene: coins, hvor handelsvolumen sprænger skalaen, men som ikke allerede er løbet løbsk"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["1-times volumen mindst $500k", "Højst +60 % på 1 time (ikke for sent ind)"],
+            "Analyst": ["Køber ved score 65 eller mere"],
+            "Executor": ["1,5 % af kontoen pr. handel", "Prisvirkning højst 1,5 %", "Højst 4 åbne", "Karantæne 1 t."],
+            "Risk": ["Stop −8 %", "Trailing fra +12 %, 8 % under toppen", "Sælger efter 4 t., hvis intet andet er sket"],
+        }), min_vol_1h_usd=500_000, max_change_1h_pct=60, max_hold_minutes=240),
     StrategyRules(
-        "s12", "Kræsen+ max", 30, 72, 300_000, 20_000_000, 95, 76, 8.0, 0.3, 3, 120, 6, 15, 10,
+        "s10", "Smart money", 30, 72, 300_000, 20_000_000, 95, 80, 5.0, 1.0, 3, 120, 6, 10, 6,
         _rules({
-            "Idé": ["Strategi 11 med den højeste indsats, desken tillader (8 %), og en længere pause"],
-            "Alt andet": ["Som strategi 10: likviditet ≥ $150k, prisvirkning ≤ 0,3 %, højst +40 % på 1 t.,",
-                          "top 10 ≤ 20 %, bundtede ≤ 5 %, score ≥ 76, trailing +15 %/10 %, stop −6 %"],
-            "Executor": ["8 % af kontoen pr. handel", "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Pause i 48 t. efter 2 tab i træk"],
-        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
-        pause_after_losses=2, pause_hours=48),
+            "Idé": ["Kun når alt peger samme vej: køberstrøm, holdervækst og smart wallets er enige. Få, men store handler"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Køber ved score 80 eller mere"],
+            "Executor": ["5 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Stop −6 %", "Trailing fra +10 %, 6 % under toppen"],
+        })),
     StrategyRules(
-        "s13", "Kræsen+ 15 %", 30, 72, 300_000, 20_000_000, 95, 76, 15.0, 0.3, 3, 120, 6, 15, 10,
+        "s11", "Rolig akkumulering", 30, 72, 300_000, 20_000_000, 95, 62, 1.5, 1.0, 4, 90, 6, 10, 6,
         _rules({
-            "Idé": ["Præcis som strategi 12, men 15 % indsats. Kun en større indsats, ikke bedre regler"],
-            "Alt andet": ["Som strategi 10: likviditet ≥ $150k, prisvirkning ≤ 0,3 %, højst +40 % på 1 t.,",
-                          "top 10 ≤ 20 %, bundtede ≤ 5 %, score ≥ 76, trailing +15 %/10 %, stop −6 %"],
-            "Executor": ["15 % af kontoen pr. handel (over den rigtige kontos grænse på 8 %)", "Højst 3 åbne",
-                         "Karantæne 2 t."],
-            "Risk": ["Pause i 48 t. efter 2 tab i træk", "Ét stop-tab koster ca. 1,4 % af kontoen"],
-        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
-        pause_after_losses=2, pause_hours=48),
+            "Idé": ["Køb, før det bliver åbenlyst: coins med god score, men som endnu ikke har bevæget sig meget"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Højst +8 % på 1 time"],
+            "Analyst": ["Køber ved score 62 eller mere"],
+            "Executor": ["1,5 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 4 åbne", "Karantæne 90 min."],
+            "Risk": ["Stop −6 %", "Trailing fra +10 %, 6 % under toppen"],
+        }), max_change_1h_pct=8),
     StrategyRules(
-        "s14", "Max kræsen", 30, 72, 300_000, 20_000_000, 100, 82, 15.0, 0.2, 3, 120, 6, 15, 10,
+        "s12", "Ikke FOMO", 30, 72, 300_000, 20_000_000, 95, 70, 2.0, 0.5, 3, 120, 6, 10, 7,
         _rules({
-            "Idé": ["Alle kræsne krav skruet helt op, og 15 % indsats som strategi 13",
-                    "Score 82 er det højeste, der er set mere end én gang på 2,6 dage"],
-            "Filter": ["Likviditet ≥ $250k, 1-times volumen ≥ $150k, højst +25 % på 1 t.",
-                       "LP 100 % brændt/låst, top 10 ≤ 15 %, udvikler ≤ 1 %, bundtede ≤ 3 %"],
-            "Analyst": ["Køber ved score 82 eller mere"],
-            "Executor": ["15 % af kontoen pr. handel", "Prisvirkning højst 0,2 %", "Køber ikke, hvis kursen har flyttet sig over 1 %",
-                         "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Pause i 48 t. efter 2 tab i træk"],
-        }), min_liq_usd=250_000, min_vol_1h_usd=150_000, max_change_1h_pct=25, max_top10_pct=15,
-        max_dev_pct=1, max_bundle_pct=3, max_entry_drift_pct=1.0, pause_after_losses=2, pause_hours=48),
+            "Idé": ["Køb aldrig toppen: højst +30 % på 1 time, kursen må ikke have flyttet sig siden scanningen, og ejerne skal være spredt"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Højst +30 % på 1 time", "Top 10 ≤ 20 %"],
+            "Analyst": ["Køber ved score 70 eller mere"],
+            "Executor": ["2 % af kontoen pr. handel", "Prisvirkning højst 0,5 %", "Højst 3 åbne", "Karantæne 2 t.",
+                         "Køber ikke, hvis kursen har flyttet sig over 1,5 % siden scanningen"],
+            "Risk": ["Stop −6 %", "Trailing fra +10 %, 7 % under toppen"],
+        }), max_change_1h_pct=30, max_top10_pct=20, max_entry_drift_pct=1.5),
     StrategyRules(
-        "s15", "Bred max kræsen", 10, 168, 100_000, 20_000_000, 100, 82, 15.0, 0.2, 3, 120, 6, 15, 10,
+        "s13", "Risiko 1:2", 30, 72, 300_000, 20_000_000, 95, 70, 2.0, 1.0, 4, 60, 5, 100, 10,
         _rules({
-            "Idé": ["Strategi 1's brede vindue med alle strategi 14's stramme krav"],
-            "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio."],
-            "Filter": ["Likviditet ≥ $250k, 1-times volumen ≥ $150k, højst +25 % på 1 t.",
-                       "LP 100 % brændt/låst, top 10 ≤ 15 %, udvikler ≤ 1 %, bundtede ≤ 3 %"],
-            "Analyst": ["Køber ved score 82 eller mere"],
-            "Executor": ["15 % af kontoen pr. handel", "Prisvirkning højst 0,2 %",
-                         "Køber ikke, hvis kursen har flyttet sig over 1 %", "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Pause i 48 t. efter 2 tab i træk"],
-        }), min_liq_usd=250_000, min_vol_1h_usd=150_000, max_change_1h_pct=25, max_top10_pct=15,
-        max_dev_pct=1, max_bundle_pct=3, max_entry_drift_pct=1.0, pause_after_losses=2, pause_hours=48),
+            "Idé": ["Klassisk fast risiko/gevinst: risikér 5 for at tjene 10. Ingen trailing, kun stop eller mål"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Køber ved score 70 eller mere"],
+            "Executor": ["2 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 4 åbne", "Karantæne 1 t."],
+            "Risk": ["Stop −5 %", "Sælger ved +10 % (gevinstmål)", "Ingen trailing"],
+        }), take_profit_pct=10.0),
     StrategyRules(
-        "s16", "Bred Kræsen+ 15 %", 10, 168, 100_000, 20_000_000, 95, 76, 15.0, 0.3, 3, 120, 6, 15, 10,
+        "s14", "Risiko 1:3", 30, 72, 300_000, 20_000_000, 95, 70, 2.0, 1.0, 4, 60, 4, 100, 10,
         _rules({
-            "Idé": ["Strategi 1's brede vindue med alle strategi 13's regler"],
-            "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio."],
-            "Filter": ["Likviditet ≥ $150k, højst +40 % på 1 t.", "LP mindst 95 %, top 10 ≤ 20 %, bundtede ≤ 5 %"],
-            "Analyst": ["Køber ved score 76 eller mere"],
-            "Executor": ["15 % af kontoen pr. handel", "Prisvirkning højst 0,3 %", "Højst 3 åbne", "Karantæne 2 t."],
-            "Risk": ["Stop −6 %", "Trailing fra +15 %, 10 % under toppen", "Pause i 48 t. efter 2 tab i træk"],
-        }), min_liq_usd=150_000, max_change_1h_pct=40, max_top10_pct=20, max_bundle_pct=5,
-        pause_after_losses=2, pause_hours=48),
+            "Idé": ["Som 1:2, men risikér 4 for at tjene 12. Kræver kun, at hver fjerde handel vinder, for at gå i nul"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Køber ved score 70 eller mere"],
+            "Executor": ["2 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 4 åbne", "Karantæne 1 t."],
+            "Risk": ["Stop −4 %", "Sælger ved +12 % (gevinstmål)", "Ingen trailing"],
+        }), take_profit_pct=12.0),
     StrategyRules(
-        "s17", "Mange små", 10, 168, 100_000, 20_000_000, 90, 55, 0.5, 1.0, 10, 15, 4, 3, 2,
+        "s15", "Sikker først", 30, 72, 300_000, 20_000_000, 100, 68, 2.0, 0.5, 3, 120, 6, 10, 6,
         _rules({
-            "Idé": ["Rigtig mange små handler: lave krav, lille indsats, hurtigt ude igen"],
+            "Idé": ["Undgå rug-pulls for enhver pris: de strammeste sikkerhedskrav, selv med lavere scoretærskel"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["LP 100 % brændt/låst", "Likviditet mindst $200k", "Top 10 ≤ 15 %, udvikler ≤ 1 %, bundtede ≤ 3 %"],
+            "Analyst": ["Køber ved score 68 eller mere"],
+            "Executor": ["2 % af kontoen pr. handel", "Prisvirkning højst 0,5 %", "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Stop −6 %", "Trailing fra +10 %, 6 % under toppen"],
+        }), min_liq_usd=200_000, max_top10_pct=15, max_dev_pct=1, max_bundle_pct=3),
+    StrategyRules(
+        "s16", "Mange små", 10, 168, 100_000, 20_000_000, 90, 55, 0.5, 1.0, 10, 15, 4, 3, 2,
+        _rules({
+            "Idé": ["Spred bredt: rigtig mange små handler, lave krav og hurtigt ude igen"],
             "Scout": ["Alder 10 min.–7 dage", "Markedsværdi $100k–$20 mio. (bredt vindue)"],
-            "Filter": ["Som strategi 2, men LP mindst 90 %"],
+            "Filter": ["LP mindst 90 %"],
             "Analyst": ["Køber ved score 55 eller mere"],
             "Executor": ["0,5 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 10 åbne", "Karantæne 15 min."],
             "Risk": ["Stop −4 %", "Sælger ved +5 % (gevinstmål)", "Trailing fra +3 %, 2 % under toppen",
                      "Sælger efter 30 min., hvis intet andet er sket"],
         }), take_profit_pct=5.0, max_hold_minutes=30),
+    StrategyRules(
+        "s17", "Høj overbevisning", 30, 72, 300_000, 20_000_000, 95, 78, 8.0, 1.0, 2, 180, 6, 12, 8,
+        _rules({
+            "Idé": ["Satser stort, men sjældent: kun de allerbedste coins, og pause, når det går dårligt"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Køber ved score 78 eller mere"],
+            "Executor": ["8 % af kontoen pr. handel (den rigtige kontos maksimum)", "Prisvirkning højst 1,0 %", "Højst 2 åbne",
+                         "Karantæne 3 t."],
+            "Risk": ["Stop −6 %", "Trailing fra +12 %, 8 % under toppen", "Pause i 24 t. efter 2 tab i træk"],
+        }), pause_after_losses=2, pause_hours=24),
+    StrategyRules(
+        "s18", "Kontrol: ingen scoretærskel", 30, 72, 300_000, 20_000_000, 95, 0, 1.0, 1.0, 3, 120, 6, 8, 6,
+        _rules({
+            "Idé": ["Kontrolgruppen: køber alt, der består filtrene, uanset score. Viser, om scoren overhovedet hjælper"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Ingen scoretærskel: køber alt, der kommer igennem filtrene"],
+            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 3 åbne", "Karantæne 2 t."],
+            "Risk": ["Stop −6 %", "Trailing fra +8 %, 6 % under toppen"],
+        })),
+    StrategyRules(
+        "s19", "Diamanthænder", 30, 72, 300_000, 20_000_000, 95, 72, 1.0, 1.0, 3, 240, 35, 100, 20,
+        _rules({
+            "Idé": ["Det modsatte af en stram stop: hold i op til et døgn og lad kursen svinge. Tester, om stop-tabene æder gevinsten"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Køber ved score 72 eller mere"],
+            "Executor": ["1 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 3 åbne", "Karantæne 4 t."],
+            "Risk": ["Stop −35 %", "Ingen trailing", "Sælger efter 24 t., hvis intet andet er sket"],
+        }), max_hold_minutes=1440),
+    StrategyRules(
+        "s20", "Tæt trailing", 30, 72, 300_000, 20_000_000, 95, 70, 1.5, 1.0, 4, 60, 5, 4, 3,
+        _rules({
+            "Idé": ["Lås gevinsten tidligt: trailing slås til ved +4 % og følger tæt efter"],
+            "Scout": ["Alder 30 min.–72 t.", "Markedsværdi $300k–$20 mio."],
+            "Filter": ["Som strategi 2's grundfiltre (LP mindst 95 %)"],
+            "Analyst": ["Køber ved score 70 eller mere"],
+            "Executor": ["1,5 % af kontoen pr. handel", "Prisvirkning højst 1,0 %", "Højst 4 åbne", "Karantæne 1 t."],
+            "Risk": ["Stop −5 %", "Trailing fra +4 %, 3 % under toppen"],
+        })),
 )
 MIN_LP = min(s.min_lp_pct for s in STRATEGIES)
 

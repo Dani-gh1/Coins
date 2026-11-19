@@ -125,14 +125,14 @@ class StrategyNotificationTests(unittest.TestCase):
             titles = [m[0] for m in rec.msgs]
             for k in ("S1", "S2", "S3"):
                 self.assertIn(f"{k} køb: GOOD", titles)
-            s3 = next(m for m in rec.msgs if m[0] == "S3 køb: GOOD")
-            self.assertIn("Gamle regler", s3[1])
-            self.assertIn("indsats 8,0 %", s3[1])
+            s2 = next(m for m in rec.msgs if m[0] == "S2 køb: GOOD")
+            self.assertIn("Scalper", s2[1])
+            self.assertIn("indsats 2,0 %", s2[1])
             src.jup.price["GOOD"] = 0.0005
             desk.shadow_tick()
             sells = [m for m in rec.msgs if " salg: GOOD " in m[0]]
             self.assertEqual(sorted((m[0].split()[0] for m in sells), key=lambda k: int(k[1:])),
-                             ["S1", "S2", "S3", "S4", "S5", "S6", "S8", "S9", "S17"])
+                             ["S1", "S2", "S3", "S4", "S12", "S13", "S14", "S16", "S18", "S19", "S20"])
             self.assertTrue(all("Stop loss" in m[1] and "kontoen står på −" in m[1] for m in sells))
             self.assertNotIn("$", " ".join(t + m for t, m, _ in rec.msgs))
             desk.log.close()
